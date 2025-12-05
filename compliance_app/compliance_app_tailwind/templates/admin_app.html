@@ -1,29 +1,72 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h2 class="text-xl font-semibold mb-4">App Admin</h2>
+<h2 class="text-xl font-semibold mb-4">App Config</h2>
 
-<div class="bg-white p-4 shadow rounded max-w-xl">
-    <form method="POST" class="space-y-4">
-        <div>
-            <label class="block text-sm text-slate-600 mb-1">Version number</label>
-            <input name="version" value="{{ settings.version }}" class="w-full border p-2 rounded" placeholder="e.g. 1.0">
+<div class="bg-white shadow rounded max-w-xl relative" data-widget-id="admin-app-config">
+    <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Settings</div>
+    <form method="POST" class="p-4 space-y-2">
+        <div class="grid grid-cols-[1fr,180px] items-center px-3 py-2 rounded bg-slate-50 text-sm">
+            <div class="text-left">Version number</div>
+            <div class="text-center">
+                <input name="version" value="{{ settings.version }}" class="w-full border p-2 rounded text-sm" placeholder="e.g. 1.0">
+            </div>
         </div>
-        <div class="space-y-2">
-            <label class="flex items-center space-x-2">
+        <div class="grid grid-cols-[1fr,180px] items-center px-3 py-2 rounded bg-slate-100/60 text-sm">
+            <div class="text-left">Show version number on each page</div>
+            <div class="text-center">
                 <input type="checkbox" name="show_version" {% if settings.show_version %}checked{% endif %} class="h-4 w-4">
-                <span class="text-sm">Show version number on each page</span>
-            </label>
-            <label class="flex items-center space-x-2">
-                <input type="checkbox" name="show_page_name" {% if settings.show_page_name %}checked{% endif %} class="h-4 w-4">
-                <span class="text-sm">Show page name on each page</span>
-            </label>
-            <label class="flex items-center space-x-2">
-                <input type="checkbox" name="show_module_tree" {% if settings.show_module_tree %}checked{% endif %} class="h-4 w-4">
-                <span class="text-sm">Show module tree on each page</span>
-            </label>
+            </div>
         </div>
-        <button class="bg-blue-600 text-white px-4 py-2 rounded">Save</button>
+        <div class="grid grid-cols-[1fr,180px] items-center px-3 py-2 rounded bg-slate-50 text-sm">
+            <div class="text-left">Show page name on each page</div>
+            <div class="text-center">
+                <input type="checkbox" name="show_page_name" {% if settings.show_page_name %}checked{% endif %} class="h-4 w-4">
+            </div>
+        </div>
+        <div class="grid grid-cols-[1fr,180px] items-center px-3 py-2 rounded bg-slate-100/60 text-sm">
+            <div class="text-left">Show module tree on each page</div>
+            <div class="text-center">
+                <input type="checkbox" name="show_module_tree" {% if settings.show_module_tree %}checked{% endif %} class="h-4 w-4">
+            </div>
+        </div>
+        <div class="grid grid-cols-[1fr,180px] items-center px-3 py-2 rounded bg-slate-50 text-sm">
+            <div class="text-left">Show widget reference buttons</div>
+            <div class="text-center">
+                <input type="checkbox" name="show_cut_icon" {% if settings.show_cut_icon %}checked{% endif %} class="h-4 w-4">
+            </div>
+        </div>
+        <div class="flex items-center gap-2 pt-2 px-3">
+            <button class="bg-blue-600 text-white px-4 py-2 rounded">Save</button>
+        </div>
+    </form>
+</div>
+
+<div class="bg-white shadow rounded max-w-xl mt-6 relative" data-widget-id="app-config-chart-colors">
+    <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Chart Colors</div>
+    {% set comp_completed = completion_colors.get('Completed', '#16a34a') %}
+    {% set comp_pending = completion_colors.get('Pending', '#f59e0b') %}
+    {% set comp_overdue = completion_colors.get('Overdue', '#ef4444') %}
+    <form method="POST" action="/admin/task-config/colors" class="p-4 space-y-2 text-sm">
+        <div class="grid grid-cols-[1fr,150px,130px] items-center bg-slate-100 px-3 py-2 rounded font-semibold text-slate-700">
+            <div class="text-left">Label</div>
+            <div class="text-center">Colour</div>
+            <div class="text-center">Hex</div>
+        </div>
+        {% for label, val, bg in [
+            ('Completed', comp_completed, 'bg-slate-50'),
+            ('Pending', comp_pending, 'bg-slate-100/60'),
+            ('Overdue', comp_overdue, 'bg-slate-50')
+        ] %}
+        <div class="grid grid-cols-[1fr,150px,130px] items-center px-3 py-2 rounded {{ bg }}">
+            <div class="text-left">{{ label }}</div>
+            <input type="color" name="completion_{{ label|lower }}" value="{{ val }}" class="h-9 w-16 border rounded mx-auto">
+            <input type="text" value="{{ val }}" readonly class="text-xs text-slate-600 bg-slate-50 border rounded px-2 py-1 text-center">
+        </div>
+        {% endfor %}
+        <div class="flex items-center justify-start gap-2 pt-2 px-3">
+            <button class="bg-blue-600 text-white px-4 py-2 rounded">Save Chart Colors</button>
+        </div>
     </form>
 </div>
 

@@ -3,14 +3,39 @@
 {% block content %}
 <h2 class="text-xl font-semibold mb-4">Admin Dashboard</h2>
 
-<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-    <div class="bg-white p-4 shadow rounded text-center">
-        <div class="text-sm text-slate-500">Total users</div>
-        <div class="text-2xl">{{ total_users }}</div>
+<div class="bg-white shadow rounded relative" data-widget-id="admin-dashboard-cards">
+    <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Users</div>
+    <div class="p-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-slate-50 border border-slate-100 p-4 rounded text-center">
+                <div class="text-sm text-slate-500">Total users</div>
+                <div class="text-2xl">{{ total_users }}</div>
+            </div>
+            <div class="bg-slate-50 border border-slate-100 p-4 rounded text-center">
+                <div class="text-sm text-slate-500">Admins</div>
+                <div class="text-2xl">{{ total_admins }}</div>
+            </div>
+        </div>
     </div>
-    <div class="bg-white p-4 shadow rounded text-center">
-        <div class="text-sm text-slate-500">Admins</div>
-        <div class="text-2xl">{{ total_admins }}</div>
+</div>
+
+<div class="bg-white shadow rounded relative mt-6" data-widget-id="admin-dashboard-companies">
+    <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Companies</div>
+    <div class="p-4">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="bg-slate-50 border border-slate-100 p-4 rounded text-center">
+                <div class="text-sm text-slate-500">Total companies</div>
+                <div class="text-2xl">{{ total_companies }}</div>
+            </div>
+            <div class="bg-slate-50 border border-slate-100 p-4 rounded text-center">
+                <div class="text-sm text-slate-500">Active companies</div>
+                <div class="text-2xl text-green-700">{{ active_companies }}</div>
+            </div>
+            <div class="bg-slate-50 border border-slate-100 p-4 rounded text-center">
+                <div class="text-sm text-slate-500">Company admins</div>
+                <div class="text-2xl">{{ total_company_admins }}</div>
+            </div>
+        </div>
     </div>
 </div>
 
