@@ -5,18 +5,21 @@ DB_NAME = "compliance.db"
 
 
 def get_connection():
+    """Open a SQLite connection to the compliance database."""
     conn = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
     return conn
 
 # Check if a column exists in a table (used for lightweight migrations)
 def _column_exists(cur, table, column):
+    """Return True if the given column exists on the table."""
     cur.execute(f"PRAGMA table_info({table})")
     return any(row[1] == column for row in cur.fetchall())
 
 
 # Ensure tables/columns exist and seed defaults
 def create_tables_if_needed():
+    """Create tables, add missing columns, and seed default data."""
     conn = get_connection()
     cur = conn.cursor()
 
@@ -218,7 +221,7 @@ def create_tables_if_needed():
 
 # Set a specific user's password (already hashed)
 def set_user_password(user_id, hashed_password):
-    # Update a user's password to a hashed value
+    """Update a user's password to the provided hashed value."""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("UPDATE users SET password=? WHERE id=?", (hashed_password, user_id))
@@ -227,6 +230,7 @@ def set_user_password(user_id, hashed_password):
 
 # Look up a user by username
 def get_user_by_username(username):
+    """Return a user row by username or None if missing."""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("SELECT * FROM users WHERE username=?", (username,))
@@ -237,6 +241,7 @@ def get_user_by_username(username):
 
 # All tasks assigned to a user (with status)
 def get_tasks_for_user(user_id):
+    """Fetch tasks assigned to a user along with status info."""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("""
@@ -254,6 +259,7 @@ def get_tasks_for_user(user_id):
 
 # Single task for a user (used in detail view)
 def get_task_for_user(user_id, task_id):
+    """Fetch a single task row for a user including answer/status."""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("""
@@ -272,6 +278,7 @@ def get_task_for_user(user_id, task_id):
 
 # Record whether a user's answer was correct
 def mark_task_result(user_id, task_id, answer, correct):
+    """Store a task answer and mark completion status."""
     conn = get_connection()
     cur = conn.cursor()
 
@@ -292,6 +299,7 @@ def mark_task_result(user_id, task_id, answer, correct):
 
 # Admin: summary counts for dashboards
 def admin_get_summary_counts(company_id):
+    """Return aggregate task/user counts, optionally filtered by company."""
     conn = get_connection()
     cur = conn.cursor()
     if company_id is None:
@@ -395,6 +403,7 @@ def admin_get_summary_counts(company_id):
 
 # Admin: list users
 def admin_get_all_users(company_id=None):
+    """Return all users, optionally filtered to a company."""
     conn = get_connection()
     cur = conn.cursor()
     if company_id:
@@ -407,6 +416,7 @@ def admin_get_all_users(company_id=None):
 
 
 def admin_get_user(user_id, company_id=None):
+    """Return a single user row by id, optionally scoped by company."""
     conn = get_connection()
     cur = conn.cursor()
     if company_id:
@@ -420,6 +430,7 @@ def admin_get_user(user_id, company_id=None):
 
 # Admin: option lists (impact/severity)
 def admin_get_options(opt_type, company_id=None):
+    """List impact or severity options, optionally filtered to a company."""
     table = "impact_options" if opt_type == "impact" else "severity_options"
     conn = get_connection()
     cur = conn.cursor()
@@ -433,6 +444,7 @@ def admin_get_options(opt_type, company_id=None):
 
 
 def admin_get_option(opt_type, option_id, company_id=None):
+    """Get a single impact or severity option by id."""
     table = "impact_options" if opt_type == "impact" else "severity_options"
     conn = get_connection()
     cur = conn.cursor()
@@ -446,6 +458,7 @@ def admin_get_option(opt_type, option_id, company_id=None):
 
 
 def admin_add_option(opt_type, value, company_id=1):
+    """Insert a new option; return error text on duplicate."""
     table = "impact_options" if opt_type == "impact" else "severity_options"
     conn = get_connection()
     cur = conn.cursor()
@@ -462,6 +475,7 @@ def admin_add_option(opt_type, value, company_id=1):
 
 # Admin: delete an option value
 def admin_delete_option(opt_type, option_id, company_id=None):
+    """Remove an option row."""
     table = "impact_options" if opt_type == "impact" else "severity_options"
     conn = get_connection()
     cur = conn.cursor()
@@ -475,7 +489,7 @@ def admin_delete_option(opt_type, option_id, company_id=None):
 
 # Admin: read app settings
 def admin_get_app_settings():
-    # Read the single row of app-level settings
+    """Read the single row of global app settings."""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("SELECT * FROM app_settings WHERE id=1")
@@ -486,7 +500,7 @@ def admin_get_app_settings():
 
 # Admin: update app settings
 def admin_update_app_settings(version, show_version, show_page_name, show_module_tree, show_cut_icon):
-    # Save version and UI toggle flags
+    """Persist the main app setting flags and version string."""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("""
@@ -500,6 +514,7 @@ def admin_update_app_settings(version, show_version, show_page_name, show_module
 
 # Admin: update chart palettes (CSV hex strings)
 def admin_update_chart_palettes(severity_palette, impact_palette, completion_palette):
+    """Store chart palette strings for severity, impact, and completion."""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("""
@@ -513,6 +528,7 @@ def admin_update_chart_palettes(severity_palette, impact_palette, completion_pal
 
 # Palette helpers
 def _palette_to_dict(palette_str):
+    """Convert a stored palette string into a dict of label->color."""
     if not palette_str:
         return {}
     mapping = {}
@@ -526,10 +542,12 @@ def _palette_to_dict(palette_str):
 
 
 def _dict_to_palette(mapping):
+    """Convert a palette dict back to a storage string."""
     return ",".join(f"{k}:{v}" for k, v in mapping.items())
 
 
 def admin_set_option_color(opt_type, label, color_hex):
+    """Save a hex colour for an impact/severity label in app settings."""
     col = "impact_palette" if opt_type == "impact" else "severity_palette"
     conn = get_connection()
     cur = conn.cursor()
@@ -545,6 +563,7 @@ def admin_set_option_color(opt_type, label, color_hex):
 
 # Admin: task field descriptions
 def admin_get_task_field_descriptions():
+    """Return task field metadata keyed by field name."""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("SELECT field, description, is_required FROM task_field_descriptions")
@@ -560,6 +579,7 @@ def admin_get_task_field_descriptions():
 
 
 def admin_update_task_field_descriptions(updates):
+    """Upsert task field descriptions and required flags."""
     conn = get_connection()
     cur = conn.cursor()
     for field, payload in updates.items():
@@ -576,6 +596,7 @@ def admin_update_task_field_descriptions(updates):
 
 # Admin: create user
 def admin_create_user(username, password, role="user", first_name=None, last_name=None, email=None, mobile=None, send_notifications=False, company_id=1, is_active=True):
+    """Create a user and assign existing tasks; return error text on conflict."""
     conn = get_connection()
     cur = conn.cursor()
     try:
@@ -605,6 +626,7 @@ def admin_create_user(username, password, role="user", first_name=None, last_nam
 
 # Admin: update user
 def admin_update_user(user_id, username, password, role, first_name, last_name, email, mobile, send_notifications, company_id=None, is_active=True):
+    """Update user fields; guard against removing the last admin."""
     conn = get_connection()
     cur = conn.cursor()
     try:
@@ -642,7 +664,7 @@ def admin_update_user(user_id, username, password, role, first_name, last_name, 
 
 # Admin: compliance counts per user (totals/completed)
 def admin_user_compliance(company_id):
-    # Get total/completed counts per user for summaries
+    """Return per-user compliance counts (completed, pending, overdue)."""
     conn = get_connection()
     cur = conn.cursor()
     if company_id is None:
@@ -687,6 +709,7 @@ def admin_user_compliance(company_id):
 
 # Admin: list tasks (with assignment summary)
 def admin_get_all_tasks(company_id=None):
+    """List tasks with owner, company, assignment scope, and overdue flag."""
     conn = get_connection()
     cur = conn.cursor()
     if company_id:
@@ -747,6 +770,7 @@ def admin_get_all_tasks(company_id=None):
 
 # Admin: get single task
 def admin_get_task(task_id, company_id=None):
+    """Fetch a single task row by id, optionally scoping to company."""
     conn = get_connection()
     cur = conn.cursor()
     if company_id:
@@ -770,6 +794,7 @@ def admin_get_task(task_id, company_id=None):
 
 # Admin: update task
 def admin_update_task(task_id, title, description, due_date, impact, severity, owner_user_id, question, answer, company_id=None):
+    """Update task fields for an existing task."""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("""
@@ -783,6 +808,7 @@ def admin_update_task(task_id, title, description, due_date, impact, severity, o
 
 # Admin: counts grouped by a column (impact/severity)
 def admin_task_counts_by(column, company_id=None):
+    """Count tasks grouped by impact or severity, optionally by company."""
     if column not in ("impact", "severity"):
         return []
     conn = get_connection()
@@ -812,6 +838,7 @@ def admin_task_counts_by(column, company_id=None):
 
 # Admin: create task and assign
 def admin_create_task(title, description, due_date, impact, severity, owner_user_id, question, answer, company_id, user_ids=None, assign_all=False):
+    """Create a task and assign it to selected or all eligible users."""
     conn = get_connection()
     cur = conn.cursor()
     user_ids = user_ids or []
@@ -855,6 +882,7 @@ def admin_create_task(title, description, due_date, impact, severity, owner_user
 
 # Admin: user report with their tasks
 def admin_get_user_report(user_id):
+    """Return a user row and all their task rows for reporting."""
     conn = get_connection()
     cur = conn.cursor()
 
@@ -887,6 +915,7 @@ def admin_get_user_report(user_id):
 
 # Admin: companies helpers
 def admin_get_companies():
+    """List all companies."""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("SELECT * FROM companies ORDER BY name")
@@ -896,6 +925,7 @@ def admin_get_companies():
 
 
 def admin_get_company(company_id):
+    """Get a single company row by id."""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("SELECT * FROM companies WHERE id=?", (company_id,))
@@ -905,6 +935,7 @@ def admin_get_company(company_id):
 
 
 def admin_create_company(name, address1=None, address2=None, address3=None, state=None, postcode=None, admin_user_id=None, is_active=1):
+    """Insert a new company and optionally promote a user to company_admin."""
     conn = get_connection()
     cur = conn.cursor()
     try:
@@ -924,6 +955,7 @@ def admin_create_company(name, address1=None, address2=None, address3=None, stat
 
 
 def admin_update_company(company_id, name, admin_user_id=None, address1=None, address2=None, address3=None, state=None, postcode=None, is_active=1):
+    """Update company details and optionally assign a company admin."""
     conn = get_connection()
     cur = conn.cursor()
     try:

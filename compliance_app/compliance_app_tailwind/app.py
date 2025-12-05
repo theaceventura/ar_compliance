@@ -20,12 +20,14 @@ db.create_tables_if_needed()
 # Inject settings into all templates
 @app.context_processor
 def inject_app_settings():
+    """Make app settings available to every template render."""
     settings = db.admin_get_app_settings()
     return {"app_settings": settings}
 
 
 # Helper to read the current logged-in user from session
 def current_user():
+    """Return the current user dict from session, or None if not logged in."""
     if "user_id" not in session:
         return None
     return {
@@ -36,10 +38,12 @@ def current_user():
     }
 
 def _is_hashed(pw):
+    """Check whether a stored password value is hashed."""
     return isinstance(pw, str) and (pw.startswith("pbkdf2:") or pw.startswith("scrypt:"))
 
 # Decorator to require any logged-in user
 def login_required(route_function):
+    """Redirect to login if no session user is present."""
     def wrapper(*args, **kwargs):
         user = current_user()
         if user is None:
@@ -50,6 +54,7 @@ def login_required(route_function):
 
 # Decorator for company admins
 def company_admin_required(route_function):
+    """Allow only company_admin role; redirect to login otherwise."""
     def wrapper(*args, **kwargs):
         user = current_user()
         if user is None or user["role"] != "company_admin":
@@ -60,6 +65,7 @@ def company_admin_required(route_function):
 
 # Decorator to require an admin user
 def admin_required(route_function):
+    """Allow only admin role; redirect or 403 otherwise."""
     def wrapper(*args, **kwargs):
         user = current_user()
         if user is None:
@@ -74,6 +80,7 @@ def admin_required(route_function):
 # Home page -> task dashboard if logged in, otherwise login
 @app.route("/")
 def index():
+    """Send authenticated users to dashboard, others to login."""
     if "user_id" in session:
         return redirect(url_for("dashboard"))
     return redirect(url_for("login"))
@@ -82,6 +89,7 @@ def index():
 # Login page and submission
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    """Render login form and handle authentication."""
     if request.method == "GET":
         user = current_user()
         if user is not None:
@@ -126,6 +134,7 @@ def login():
 
 @app.route("/logout")
 def logout():
+    """Clear session and return to login page."""
     session.clear()
     return redirect(url_for("login"))
 
@@ -134,6 +143,7 @@ def logout():
 @app.route("/dashboard")
 @login_required
 def dashboard():
+    """Show dashboards tailored to admins, company admins, or individual users."""
     user = current_user()
     if user["role"] == "admin":
         company_arg = request.args.get("company_id", "").strip()
@@ -359,6 +369,7 @@ def dashboard():
 @app.route("/task/<int:task_id>", methods=["GET", "POST"])
 @login_required
 def task_detail(task_id):
+    """Display a single task and accept an answer submission."""
     user = current_user()
     t = db.get_task_for_user(user["id"], task_id)
     if t is None:
@@ -402,6 +413,7 @@ def task_detail(task_id):
 @app.route("/admin/dashboard")
 @admin_required
 def admin_dashboard():
+    """Show counts of users and companies for administrators."""
     admin = current_user()
     users = db.admin_get_all_users(admin["company_id"])
     companies = db.admin_get_companies()
@@ -426,6 +438,7 @@ def admin_dashboard():
 @app.route("/admin/tasks", methods=["GET", "POST"])
 @admin_required
 def admin_tasks():
+    """List tasks and handle creation in the admin view."""
     if request.method == "GET":
         admin = current_user()
         company_arg = request.args.get("company_id", "").strip()
@@ -511,6 +524,7 @@ def admin_tasks():
 @app.route("/admin/task-config")
 @admin_required
 def admin_task_config():
+    """Let admins view task field descriptions and option colors."""
     admin = current_user()
     impacts = db.admin_get_options("impact", admin["company_id"])
     severities = db.admin_get_options("severity", admin["company_id"])
@@ -546,6 +560,7 @@ def admin_task_config():
 @app.route("/admin/task-config/fields", methods=["POST"])
 @admin_required
 def admin_task_field_update():
+    """Persist admin edits to task field descriptions and required flags."""
     updates = {}
     for field in ("title", "description", "due_date", "impact", "severity", "verification_question", "verification_answer", "assignment"):
         updates[field] = {
@@ -561,6 +576,7 @@ def admin_task_field_update():
 @app.route("/admin/tasks/<int:task_id>/edit", methods=["GET", "POST"])
 @admin_required
 def admin_edit_task(task_id):
+    """Display or save edits to a specific task."""
     admin = current_user()
     task = db.admin_get_task(task_id, admin["company_id"])
     if task is None:
@@ -609,6 +625,7 @@ def admin_edit_task(task_id):
 @app.route("/admin/users")
 @admin_required
 def admin_users():
+    """List users and show a selected user's details for admins."""
     admin = current_user()
     selected_id = request.args.get("user_id", type=int)
     selected_user = db.admin_get_user(selected_id) if selected_id else None
@@ -622,6 +639,7 @@ def admin_users():
 @app.route("/admin/users", methods=["POST"])
 @admin_required
 def admin_create_user():
+    """Create or update a user from the admin form submission."""
     admin = current_user()
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "").strip()
@@ -672,6 +690,7 @@ def admin_create_user():
 @app.route("/company-admin/users", methods=["GET", "POST"])
 @company_admin_required
 def company_admin_users():
+    """Company admins manage users within their own company."""
     admin = current_user()
     company_id = admin["company_id"]
     selected_id = request.args.get("user_id", type=int)
@@ -746,6 +765,7 @@ def company_admin_users():
 @app.route("/admin/companies", methods=["GET", "POST"])
 @admin_required
 def admin_companies():
+    """Create or update companies and assign company admins."""
     admin = current_user()
     selected_id = request.args.get("company_id", type=int)
     selected_company = db.admin_get_company(selected_id) if selected_id else None
@@ -795,6 +815,7 @@ def admin_companies():
 @app.route("/admin/options/<opt_type>/add", methods=["POST"])
 @admin_required
 def admin_add_option(opt_type):
+    """Add a new impact or severity option."""
     if opt_type not in ("impact", "severity"):
         return "Invalid option type", 400
     value = request.form.get("value", "").strip()
@@ -817,6 +838,7 @@ def admin_add_option(opt_type):
 @app.route("/admin/options/<opt_type>/<int:option_id>/delete", methods=["POST"])
 @admin_required
 def admin_delete_option(opt_type, option_id):
+    """Remove an impact or severity option."""
     if opt_type not in ("impact", "severity"):
         return "Invalid option type", 400
     admin = current_user()
@@ -828,6 +850,7 @@ def admin_delete_option(opt_type, option_id):
 @app.route("/admin/options/<opt_type>/<int:option_id>/color", methods=["POST"])
 @admin_required
 def admin_update_option_color(opt_type, option_id):
+    """Update the stored colour for an option label."""
     if opt_type not in ("impact", "severity"):
         return "Invalid option type", 400
     color = request.form.get("color", "").strip()
@@ -847,6 +870,7 @@ def admin_update_option_color(opt_type, option_id):
 @app.route("/admin/app", methods=["GET", "POST"])
 @admin_required
 def admin_app_settings():
+    """Render and save global app settings and completion colours."""
     settings = db.admin_get_app_settings()
     if request.method == "GET":
         completion_colors = {}
@@ -871,6 +895,7 @@ def admin_app_settings():
 @app.route("/admin/task-config/colors", methods=["POST"])
 @admin_required
 def admin_task_config_colors():
+    """Persist completion palette overrides from the task config page."""
     settings_row = db.admin_get_app_settings()
     settings = dict(settings_row) if settings_row else {}
     severity_palette = settings.get("severity_palette", "")
@@ -893,6 +918,7 @@ def admin_task_config_colors():
 @app.route("/admin/notify/overdue")
 @admin_required
 def admin_notify_overdue():
+    """Simulate sending overdue notifications to opted-in users (prints to console)."""
     # Print a simple notice for users who opted in and have overdue tasks
     admin = current_user()
     today = date.today()
@@ -926,6 +952,7 @@ def admin_notify_overdue():
 @app.route("/admin/report/<int:user_id>")
 @admin_required
 def admin_report(user_id):
+    """Render a per-user compliance report for admins."""
     admin = current_user()
     user_row, tasks = db.admin_get_user_report(user_id)
     if user_row is None:
@@ -956,6 +983,7 @@ def admin_report(user_id):
 @app.route("/admin/report/<int:user_id>/csv")
 @admin_required
 def admin_report_csv(user_id):
+    """Stream a CSV export of a user's task report."""
     # Build a CSV stream for a single user's tasks
     admin = current_user()
     user_row, tasks = db.admin_get_user_report(user_id)
@@ -979,6 +1007,7 @@ def admin_report_csv(user_id):
 @app.route("/company-admin/report/<int:user_id>")
 @company_admin_required
 def company_admin_report(user_id):
+    """Company admin view of a user's report within their company."""
     admin = current_user()
     user_row, tasks = db.admin_get_user_report(user_id)
     if user_row is None:
@@ -1009,6 +1038,7 @@ def company_admin_report(user_id):
 @app.route("/admin/profile", methods=["GET", "POST"])
 @login_required
 def admin_profile():
+    """Let the signed-in user view and edit their profile details."""
     viewer = current_user()
     user = db.admin_get_user(viewer["id"])
     role = viewer.get("role")
@@ -1094,6 +1124,7 @@ def admin_profile():
 @app.route("/admin/report/summary.csv")
 @admin_required
 def admin_summary_csv():
+    """Stream a CSV of overall compliance stats for all users."""
     # Stream overall compliance stats for all users
     compliance = db.admin_user_compliance(None)
     def generate():
