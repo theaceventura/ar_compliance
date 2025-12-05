@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2 class="text-xl font-semibold mb-4">Company Config</h2>
+
+<div class="bg-white shadow rounded mb-6 relative" data-widget-id="admin-companies-list">
+    <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700 flex items-center justify-between">
+        <h3 class="font-semibold">Companies</h3>
+    </div>
+    <div class="p-4 space-y-2 text-sm">
+        <div class="grid grid-cols-[70px,1fr,120px,120px] gap-2 items-center bg-slate-100 px-3 py-2 rounded font-semibold text-slate-700">
+            <div class="text-center">ID</div>
+            <div class="text-left">Name</div>
+            <div class="text-center">Active</div>
+            <div class="text-center">Action</div>
+        </div>
+        {% for c in companies %}
+            <div class="grid grid-cols-[70px,1fr,120px,120px] gap-2 items-center px-3 py-2 rounded {% if loop.index0 % 2 == 0 %}bg-slate-50{% else %}bg-slate-100/60{% endif %}">
+                <div class="text-center text-xs text-slate-600">{{ c.id }}</div>
+                <div class="text-left truncate">{{ c.name }}</div>
+                <div class="text-center text-xs">
+                    {% if c.is_active %}<span class="text-green-700 font-semibold">Active</span>{% else %}<span class="text-slate-500">Inactive</span>{% endif %}
+                </div>
+                <div class="text-center">
+                    <a href="/admin/companies?company_id={{ c.id }}" class="text-blue-600 hover:underline text-sm">Edit</a>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+</div>
+
+{% if error %}
+    <div class="bg-red-100 text-red-800 px-3 py-2 rounded mb-3">{{ error }}</div>
+{% endif %}
+
+<div class="bg-white shadow rounded relative" data-widget-id="admin-companies-form">
+    <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700 flex items-center justify-between">
+        <span>{{ selected_company and 'Edit company' or 'Add company' }}</span>
+    </div>
+    <form id="company-form" method="POST" class="p-4 space-y-2 text-sm">
+        <input type="hidden" name="company_id" value="{{ selected_company.id if selected_company }}">
+        <div class="grid grid-cols-[160px,1fr] items-center px-3 py-2 rounded bg-slate-50">
+            <div class="text-left font-medium">Company name</div>
+            <input name="name" value="{{ selected_company.name if selected_company }}" class="w-full border p-2 rounded text-sm" required>
+        </div>
+        {% if selected_company %}
+        <div class="grid grid-cols-[160px,1fr] items-center px-3 py-2 rounded bg-slate-100/60">
+            <div class="text-left font-medium">Company admin</div>
+            <select name="admin_user_id" class="w-full border p-2 rounded text-sm">
+                <option value="">-- None --</option>
+                {% for u in company_users %}
+                    <option value="{{ u.id }}" {% if selected_company.company_admin_id and selected_company.company_admin_id == u.id %}selected{% endif %}>{{ u.username }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
+        <div class="grid grid-cols-[160px,1fr] items-center px-3 py-2 rounded bg-slate-100/60">
+            <div class="text-left font-medium">Active</div>
+            <div class="flex items-center space-x-2">
+                <input type="checkbox" name="is_active" class="h-4 w-4" {% if selected_company and selected_company.is_active %}checked{% elif not selected_company %}checked{% endif %}>
+                <span class="text-sm text-slate-600">Enabled</span>
+            </div>
+        </div>
+        <div class="grid grid-cols-[160px,1fr] items-center px-3 py-2 rounded bg-slate-50">
+            <div class="text-left font-medium">Address Line 1</div>
+            <input name="address1" value="{{ selected_company.address_line1 if selected_company }}" class="w-full border p-2 rounded text-sm">
+        </div>
+        <div class="grid grid-cols-[160px,1fr] items-center px-3 py-2 rounded bg-slate-100/60">
+            <div class="text-left font-medium">Address Line 2</div>
+            <input name="address2" value="{{ selected_company.address_line2 if selected_company }}" class="w-full border p-2 rounded text-sm">
+        </div>
+        <div class="grid grid-cols-[160px,1fr] items-center px-3 py-2 rounded bg-slate-50">
+            <div class="text-left font-medium">Address Line 3</div>
+            <input name="address3" value="{{ selected_company.address_line3 if selected_company }}" class="w-full border p-2 rounded text-sm">
+        </div>
+        <div class="grid grid-cols-[160px,1fr] items-center px-3 py-2 rounded bg-slate-100/60">
+            <div class="text-left font-medium">State</div>
+            <input name="state" value="{{ selected_company.state if selected_company }}" class="w-full border p-2 rounded text-sm">
+        </div>
+        <div class="grid grid-cols-[160px,1fr] items-center px-3 py-2 rounded bg-slate-50">
+            <div class="text-left font-medium">Postcode</div>
+            <input name="postcode" value="{{ selected_company.postcode if selected_company }}" class="w-full border p-2 rounded text-sm">
+        </div>
+        <div class="flex items-center justify-start gap-2 px-3 pt-2">
+            <button id="company-submit-btn" class="bg-blue-600 text-white px-4 py-2 rounded min-w-[140px]">{{ selected_company and 'Update Company' or 'Add Company' }}</button>
+            <button type="button" id="new-company-btn" class="bg-slate-200 text-slate-700 px-4 py-2 rounded text-sm min-w-[100px]">New Company</button>
+        </div>
+    </form>
+</div>
+
+<script>
+    const companyForm = document.getElementById('company-form');
+    const newCompanyBtn = document.getElementById('new-company-btn');
+    const submitCompanyBtn = document.getElementById('company-submit-btn');
+    if (companyForm && newCompanyBtn) {
+        newCompanyBtn.addEventListener('click', () => {
+            companyForm.reset();
+            const hidden = companyForm.querySelector('input[name=\"company_id\"]');
+            if (hidden) hidden.value = '';
+            if (submitCompanyBtn) submitCompanyBtn.textContent = 'Add Company';
+        });
+    }
+</script>
+
+{% endblock %}

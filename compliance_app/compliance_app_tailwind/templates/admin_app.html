@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2 class="text-xl font-semibold mb-4">App Admin</h2>
+
+<div class="bg-white p-4 shadow rounded max-w-xl">
+    <form method="POST" class="space-y-4">
+        <div>
+            <label class="block text-sm text-slate-600 mb-1">Version number</label>
+            <input name="version" value="{{ settings.version }}" class="w-full border p-2 rounded" placeholder="e.g. 1.0">
+        </div>
+        <div class="space-y-2">
+            <label class="flex items-center space-x-2">
+                <input type="checkbox" name="show_version" {% if settings.show_version %}checked{% endif %} class="h-4 w-4">
+                <span class="text-sm">Show version number on each page</span>
+            </label>
+            <label class="flex items-center space-x-2">
+                <input type="checkbox" name="show_page_name" {% if settings.show_page_name %}checked{% endif %} class="h-4 w-4">
+                <span class="text-sm">Show page name on each page</span>
+            </label>
+            <label class="flex items-center space-x-2">
+                <input type="checkbox" name="show_module_tree" {% if settings.show_module_tree %}checked{% endif %} class="h-4 w-4">
+                <span class="text-sm">Show module tree on each page</span>
+            </label>
+        </div>
+        <button class="bg-blue-600 text-white px-4 py-2 rounded">Save</button>
+    </form>
+</div>
+
+{% endblock %}

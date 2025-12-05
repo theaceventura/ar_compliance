@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2 class="text-xl font-semibold mb-4">Task Configuration</h2>
+
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div class="bg-white shadow rounded relative" data-widget-id="task-config-impact-options">
+        <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Impact options</div>
+        <div class="p-4 space-y-2 text-sm">
+            <div class="grid grid-cols-[1fr,150px,130px] gap-2 items-center bg-slate-100 px-3 py-2 rounded font-semibold text-slate-700">
+                <div class="text-left">Impact</div>
+                <div class="text-center">Colour</div>
+                <div class="text-center">Actions</div>
+            </div>
+            {% for opt in impacts %}
+                {% set default = impact_colors.get(opt.value, '#16a34a') %}
+                {% set base_bg = 'bg-slate-50' if loop.index0 % 2 == 0 else 'bg-slate-100/60' %}
+                <div class="grid grid-cols-[1fr,150px,130px] gap-2 items-center px-3 py-2 rounded {{ base_bg }}">
+                    <div class="text-left font-medium truncate">{{ opt.value }}</div>
+                    <form method="POST" action="/admin/options/impact/{{ opt.id }}/color" class="flex items-center justify-center gap-2">
+                        <input type="color" name="color" value="{{ default }}" class="h-9 w-16 border rounded">
+                        <button class="bg-slate-200 text-slate-700 px-3 py-1 rounded text-xs">Update</button>
+                    </form>
+                    <form method="POST" action="/admin/options/impact/{{ opt.id }}/delete" class="text-center">
+                        <button class="text-red-600 text-sm">Remove</button>
+                    </form>
+                </div>
+            {% endfor %}
+            <form method="POST" action="/admin/options/impact/add" class="grid grid-cols-[1fr,150px,130px] gap-2 items-center bg-slate-50 px-3 py-2 rounded border border-slate-200">
+                <input name="value" placeholder="Add impact" class="w-full border p-2 rounded">
+                <div class="flex items-center justify-center gap-2">
+                    <input type="color" name="color" value="#16a34a" class="h-9 w-16 border rounded">
+                </div>
+                <div class="text-center">
+                    <button class="bg-slate-700 text-white px-3 py-2 rounded text-sm w-full">Add</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="bg-white shadow rounded relative" data-widget-id="task-config-severity-options">
+        <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Severity options</div>
+        <div class="p-4 space-y-2 text-sm">
+            <div class="grid grid-cols-[1fr,150px,130px] gap-2 items-center bg-slate-100 px-3 py-2 rounded font-semibold text-slate-700">
+                <div class="text-left">Severity</div>
+                <div class="text-center">Colour</div>
+                <div class="text-center">Actions</div>
+            </div>
+            {% for opt in severities %}
+                {% set default = severity_colors.get(opt.value, '#2563eb') %}
+                {% set base_bg = 'bg-slate-50' if loop.index0 % 2 == 0 else 'bg-slate-100/60' %}
+                <div class="grid grid-cols-[1fr,150px,130px] gap-2 items-center px-3 py-2 rounded {{ base_bg }}">
+                    <div class="text-left font-medium truncate">{{ opt.value }}</div>
+                    <form method="POST" action="/admin/options/severity/{{ opt.id }}/color" class="flex items-center justify-center gap-2">
+                        <input type="color" name="color" value="{{ default }}" class="h-9 w-16 border rounded">
+                        <button class="bg-slate-200 text-slate-700 px-3 py-1 rounded text-xs">Update</button>
+                    </form>
+                    <form method="POST" action="/admin/options/severity/{{ opt.id }}/delete" class="text-center">
+                        <button class="text-red-600 text-sm">Remove</button>
+                    </form>
+                </div>
+            {% endfor %}
+            <form method="POST" action="/admin/options/severity/add" class="grid grid-cols-[1fr,150px,130px] gap-2 items-center bg-slate-50 px-3 py-2 rounded border border-slate-200">
+                <input name="value" placeholder="Add severity" class="w-full border p-2 rounded">
+                <div class="flex items-center justify-center gap-2">
+                    <input type="color" name="color" value="#2563eb" class="h-9 w-16 border rounded">
+                </div>
+                <div class="text-center">
+                    <button class="bg-slate-700 text-white px-3 py-2 rounded text-sm w-full">Add</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="mt-8 bg-white shadow rounded relative" data-widget-id="task-config-field-descriptions">
+    <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Task Field Descriptions</div>
+    <form method="POST" action="/admin/task-config/fields" class="p-4 space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-[1fr,120px] gap-3 items-center">
+            <div>
+                <label class="block text-sm font-semibold text-slate-700 mb-1">Title</label>
+                <textarea name="title" class="w-full border p-2 rounded text-sm leading-tight" rows="1">{{ descriptions.title.description }}</textarea>
+            </div>
+            <label class="inline-flex items-center space-x-2 text-sm text-slate-700">
+                <input type="checkbox" name="title_required" class="border rounded" {% if descriptions.title.required %}checked{% endif %}>
+                <span>Mandatory</span>
+            </label>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-[1fr,120px] gap-3 items-center">
+            <div>
+                <label class="block text-sm font-semibold text-slate-700 mb-1">Description</label>
+                <textarea name="description" class="w-full border p-2 rounded text-sm leading-tight" rows="1">{{ descriptions.description.description }}</textarea>
+            </div>
+            <label class="inline-flex items-center space-x-2 text-sm text-slate-700">
+                <input type="checkbox" name="description_required" class="border rounded" {% if descriptions.description.required %}checked{% endif %}>
+                <span>Mandatory</span>
+            </label>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-[1fr,120px] gap-3 items-center">
+            <div>
+                <label class="block text-sm font-semibold text-slate-700 mb-1">Due date</label>
+                <textarea name="due_date" class="w-full border p-2 rounded text-sm leading-tight" rows="1">{{ descriptions.due_date.description }}</textarea>
+            </div>
+            <label class="inline-flex items-center space-x-2 text-sm text-slate-700">
+                <input type="checkbox" name="due_date_required" class="border rounded" {% if descriptions.due_date.required %}checked{% endif %}>
+                <span>Mandatory</span>
+            </label>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="grid grid-cols-[1fr,120px] gap-3 items-center">
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-1">Impact</label>
+                    <textarea name="impact" class="w-full border p-2 rounded text-sm leading-tight" rows="1">{{ descriptions.impact.description }}</textarea>
+                </div>
+                <label class="inline-flex items-center space-x-2 text-sm text-slate-700">
+                    <input type="checkbox" name="impact_required" class="border rounded" {% if descriptions.impact.required %}checked{% endif %}>
+                    <span>Mandatory</span>
+                </label>
+            </div>
+            <div class="grid grid-cols-[1fr,120px] gap-3 items-center">
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-1">Severity</label>
+                    <textarea name="severity" class="w-full border p-2 rounded text-sm leading-tight" rows="1">{{ descriptions.severity.description }}</textarea>
+                </div>
+                <label class="inline-flex items-center space-x-2 text-sm text-slate-700">
+                    <input type="checkbox" name="severity_required" class="border rounded" {% if descriptions.severity.required %}checked{% endif %}>
+                    <span>Mandatory</span>
+                </label>
+            </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-[1fr,120px] gap-3 items-center">
+            <div>
+                <label class="block text-sm font-semibold text-slate-700 mb-1">Verification question</label>
+                <textarea name="verification_question" class="w-full border p-2 rounded text-sm leading-tight" rows="1">{{ descriptions.verification_question.description }}</textarea>
+            </div>
+            <label class="inline-flex items-center space-x-2 text-sm text-slate-700">
+                <input type="checkbox" name="verification_question_required" class="border rounded" {% if descriptions.verification_question.required %}checked{% endif %}>
+                <span>Mandatory</span>
+            </label>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-[1fr,120px] gap-3 items-center">
+            <div>
+                <label class="block text-sm font-semibold text-slate-700 mb-1">Verification answer</label>
+                <textarea name="verification_answer" class="w-full border p-2 rounded text-sm leading-tight" rows="1">{{ descriptions.verification_answer.description }}</textarea>
+            </div>
+            <label class="inline-flex items-center space-x-2 text-sm text-slate-700">
+                <input type="checkbox" name="verification_answer_required" class="border rounded" {% if descriptions.verification_answer.required %}checked{% endif %}>
+                <span>Mandatory</span>
+            </label>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-[1fr,120px] gap-3 items-center">
+            <div>
+                <label class="block text-sm font-semibold text-slate-700 mb-1">Assignment</label>
+                <textarea name="assignment" class="w-full border p-2 rounded text-sm leading-tight" rows="1">{{ descriptions.assignment.description }}</textarea>
+            </div>
+            <label class="inline-flex items-center space-x-2 text-sm text-slate-700">
+                <input type="checkbox" name="assignment_required" class="border rounded" {% if descriptions.assignment.required %}checked{% endif %}>
+                <span>Mandatory</span>
+            </label>
+        </div>
+
+        <button class="bg-blue-600 text-white px-4 py-2 rounded">Save Descriptions</button>
+    </form>
+</div>
+
+{% endblock %}

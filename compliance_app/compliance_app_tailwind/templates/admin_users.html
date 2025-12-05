@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2 class="text-xl font-semibold mb-4">User Config</h2>
+
+<div class="bg-white shadow rounded mb-6 relative overflow-visible" data-widget-id="admin-users-list">
+    <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700 flex items-center justify-between">
+        <h3 class="font-semibold">Users</h3>
+        <label class="inline-flex items-center space-x-2 text-sm text-slate-700">
+            <input type="checkbox" id="filterAdmins" data-role-target="{{ 'company_admin' if is_company_admin else 'admin' }}" class="h-4 w-4">
+            <span>{% if is_company_admin %}Show company admins only{% else %}Show admin users only{% endif %}</span>
+        </label>
+    </div>
+    <div class="p-4 space-y-2 text-sm">
+        <div class="grid grid-cols-[1.3fr,1.1fr,1fr,1.4fr,0.8fr,0.7fr] gap-2 items-center bg-slate-100 px-3 py-2 rounded font-semibold text-slate-700">
+            <div class="text-left">Name</div>
+            <div class="text-left">Username</div>
+            <div class="text-left">Company</div>
+            <div class="text-left">Contact</div>
+            <div class="text-center">Role</div>
+            <div class="text-center">Report</div>
+        </div>
+        {% for u in users %}
+            <div class="user-row grid grid-cols-[1.3fr,1.1fr,1fr,1.4fr,0.8fr,0.7fr] gap-2 items-center px-3 py-2 rounded {% if loop.index0 % 2 == 0 %}bg-slate-50{% else %}bg-slate-100/60{% endif %}" data-role="{{ u.role }}">
+                <div class="text-left text-sm text-slate-700 truncate">
+                    {{ u.first_name }} {{ u.last_name }}
+                </div>
+                <div class="text-left text-sm truncate">
+                    <a href="/admin/users?user_id={{ u.id }}" class="text-blue-600 hover:underline">{{ u.username or '(no username)' }}</a>
+                </div>
+                <div class="text-left text-xs text-slate-600 truncate">
+                    {% if company_lookup %}
+                        {{ company_lookup.get(u.company_id) or ('Company #' ~ u.company_id if u.company_id else 'Unassigned') }}
+                    {% else %}
+                        {{ 'Company #' ~ u.company_id if u.company_id else 'Unassigned' }}
+                    {% endif %}
+                </div>
+                <div class="text-left text-xs text-slate-600">
+                    {% if u.email %}<div>{{ u.email }}</div>{% endif %}
+                    {% if u.mobile %}<div>{{ u.mobile }}</div>{% endif %}
+                    {% if u.send_notifications %}<div class="text-green-700">Notifications</div>{% endif %}
+                </div>
+                <div class="text-center text-sm">{{ u.role }}</div>
+                <div class="text-center text-sm">
+                    {% if u.role == "user" %}
+                        {% if is_company_admin %}
+                            <a href="/company-admin/report/{{ u.id }}" class="text-blue-600 hover:underline text-sm">View</a>
+                        {% else %}
+                            <a href="/admin/report/{{ u.id }}" class="text-blue-600 hover:underline text-sm">View</a>
+                        {% endif %}
+                    {% else %}
+                        <span class="text-slate-400">—</span>
+                    {% endif %}
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+</div>
+
+{% if error %}
+    <div class="bg-red-100 text-red-800 px-3 py-2 rounded mb-3">{{ error }}</div>
+{% endif %}
+
+<div class="bg-white shadow rounded relative" data-widget-id="admin-users-form">
+    <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700 flex items-center justify-between">
+        <span>{{ selected_user and 'Edit user' or 'Add user' }}</span>
+    </div>
+    <form id="user-form" method="POST" class="p-4 space-y-2 text-sm">
+        <input type="hidden" name="user_id" value="{{ selected_user.id if selected_user }}">
+        <div class="grid grid-cols-[160px,1fr] items-center px-3 py-2 rounded bg-slate-50">
+            <div class="text-left font-medium">Username</div>
+            <input name="username" value="{{ selected_user.username if selected_user }}" class="w-full border p-2 rounded text-sm" required>
+        </div>
+        <div class="grid grid-cols-[160px,1fr] items-center px-3 py-2 rounded bg-slate-100/60">
+            <div class="text-left font-medium">Password</div>
+            <input name="password" type="password" class="w-full border p-2 rounded text-sm" {% if not selected_user %}required{% endif %} placeholder="{% if selected_user %}Leave blank to keep{% endif %}">
+        </div>
+        <div class="grid grid-cols-[160px,1fr] items-center px-3 py-2 rounded bg-slate-50">
+            <div class="text-left font-medium">First name</div>
+            <input name="first_name" value="{{ selected_user.first_name if selected_user }}" class="w-full border p-2 rounded text-sm">
+        </div>
+        <div class="grid grid-cols-[160px,1fr] items-center px-3 py-2 rounded bg-slate-100/60">
+            <div class="text-left font-medium">Last name</div>
+            <input name="last_name" value="{{ selected_user.last_name if selected_user }}" class="w-full border p-2 rounded text-sm">
+        </div>
+        <div class="grid grid-cols-[160px,1fr] items-center px-3 py-2 rounded bg-slate-50">
+            <div class="text-left font-medium">Email</div>
+            <input name="email" type="email" value="{{ selected_user.email if selected_user }}" class="w-full border p-2 rounded text-sm">
+        </div>
+        <div class="grid grid-cols-[160px,1fr] items-center px-3 py-2 rounded bg-slate-100/60">
+            <div class="text-left font-medium">Mobile</div>
+            <input name="mobile" value="{{ selected_user.mobile if selected_user }}" class="w-full border p-2 rounded text-sm">
+        </div>
+        <div class="grid grid-cols-[160px,1fr] items-center px-3 py-2 rounded bg-slate-50">
+            <div class="text-left font-medium">Role</div>
+            <select name="role" class="w-full border p-2 rounded text-sm">
+                <option value="user" {% if selected_user and selected_user.role == 'user' %}selected{% endif %}>User</option>
+                {% if allow_admin_role %}
+                <option value="admin" {% if selected_user and selected_user.role == 'admin' %}selected{% endif %}>Admin</option>
+                {% endif %}
+                <option value="company_admin" {% if selected_user and selected_user.role == 'company_admin' %}selected{% endif %}>Company Admin</option>
+            </select>
+        </div>
+        <div class="grid grid-cols-[160px,1fr] items-center px-3 py-2 rounded bg-slate-100/60">
+            <div class="text-left font-medium">Send notifications</div>
+            <div class="flex items-center space-x-2">
+                <input name="send_notifications" type="checkbox" class="h-4 w-4" {% if selected_user and selected_user.send_notifications %}checked{% endif %}>
+                <span class="text-sm text-slate-600">Enable</span>
+            </div>
+        </div>
+        <div class="grid grid-cols-[160px,1fr] items-center px-3 py-2 rounded bg-slate-100/60">
+            <div class="text-left font-medium">Active</div>
+            <div class="flex items-center space-x-2">
+                <input name="is_active" type="checkbox" class="h-4 w-4" {% if selected_user and selected_user.is_active %}checked{% endif %} {% if not selected_user %}checked{% endif %}>
+                <span class="text-sm text-slate-600">Enabled</span>
+            </div>
+        </div>
+        <div class="grid grid-cols-[160px,1fr] items-center px-3 py-2 rounded bg-slate-50">
+            <div class="text-left font-medium">Company</div>
+            {% if is_company_admin %}
+                <div class="flex items-center">
+                    {% set only_company = companies[0] if companies else None %}
+                    <input type="hidden" name="company_id" value="{{ only_company.id if only_company }}">
+                    <input class="w-full border p-2 rounded text-sm bg-slate-100" value="{{ only_company.name if only_company else 'Unassigned' }}" disabled>
+                </div>
+            {% else %}
+                <select name="company_id" class="w-full border p-2 rounded text-sm">
+                    {% for c in companies %}
+                        <option value="{{ c.id }}" {% if selected_user and selected_user.company_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+                    {% endfor %}
+                </select>
+            {% endif %}
+        </div>
+        <div class="flex items-center justify-start gap-2 px-3 pt-2">
+            <button id="user-submit-btn" class="bg-blue-600 text-white px-4 py-2 rounded min-w-[140px]">{{ selected_user and 'Update User' or 'Add User' }}</button>
+            <button type="button" id="new-user-btn" class="bg-slate-200 text-slate-700 px-4 py-2 rounded text-sm min-w-[100px]">New User</button>
+        </div>
+    </form>
+</div>
+
+<script>
+    const form = document.getElementById('user-form');
+    const newBtn = document.getElementById('new-user-btn');
+    const submitBtn = document.getElementById('user-submit-btn');
+    if (form && newBtn) {
+        newBtn.addEventListener('click', () => {
+            form.reset();
+            const hidden = form.querySelector('input[name="user_id"]');
+            if (hidden) hidden.value = '';
+            const pwd = form.querySelector('input[name="password"]');
+            if (pwd) pwd.required = true;
+            if (submitBtn) submitBtn.textContent = 'Add User';
+        });
+    }
+
+    const filterCheckbox = document.getElementById('filterAdmins');
+    const rows = document.querySelectorAll('.user-row');
+    if (filterCheckbox) {
+        const targetRole = filterCheckbox.dataset.roleTarget || 'admin';
+        filterCheckbox.addEventListener('change', () => {
+            const showAdmins = filterCheckbox.checked;
+            rows.forEach(r => {
+                const role = r.getAttribute('data-role');
+                r.style.display = (!showAdmins || role === targetRole) ? '' : 'none';
+            });
+        });
+    }
+</script>
+
+{% endblock %}

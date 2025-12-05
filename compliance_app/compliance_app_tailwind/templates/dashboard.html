@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="flex items-center justify-between mb-4">
+    <h2 class="text-xl font-semibold">
+        User Task Dashboard - {{ (user.first_name or '') }} {{ (user.last_name or '') }}
+    </h2>
+    {% if is_company_admin %}
+    <a href="/dashboard" class="text-blue-600 text-sm hover:underline">View company dashboard</a>
+    {% endif %}
+</div>
+
+<div class="bg-white shadow rounded relative mb-6" data-widget-id="user-dashboard-metrics">
+    <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Your metrics</div>
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 p-4">
+        <div class="bg-slate-50 border border-slate-100 p-4 rounded text-center">
+            <div class="text-sm text-slate-600">Total Tasks</div>
+            <div class="text-2xl font-semibold">{{ total_tasks }}</div>
+        </div>
+        <div class="bg-slate-50 border border-slate-100 p-4 rounded text-center">
+            <div class="text-sm text-slate-600">Completed</div>
+            <div class="text-2xl font-semibold text-green-700">{{ completed_count }}</div>
+        </div>
+        <div class="bg-slate-50 border border-slate-100 p-4 rounded text-center">
+            <div class="text-sm text-slate-600">Pending</div>
+            <div class="text-2xl font-semibold text-amber-700">{{ pending_count }}</div>
+        </div>
+        <div class="bg-slate-50 border border-slate-100 p-4 rounded text-center">
+            <div class="text-sm text-slate-600">Compliance</div>
+            <div class="text-2xl font-semibold">{{ compliance_percent }}%</div>
+        </div>
+    </div>
+</div>
+
+<div class="bg-white shadow rounded relative mb-6" data-widget-id="user-dashboard-charts">
+    <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Your task charts</div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 p-4">
+        <div class="bg-slate-50 border border-slate-100 p-4 rounded">
+            <h3 class="font-semibold mb-3 text-sm text-slate-700">Severity distribution</h3>
+            <canvas id="severityChart" height="200"></canvas>
+        </div>
+        <div class="bg-slate-50 border border-slate-100 p-4 rounded">
+            <h3 class="font-semibold mb-3 text-sm text-slate-700">Impact distribution</h3>
+            <canvas id="impactChart" height="200"></canvas>
+        </div>
+        <div class="bg-slate-50 border border-slate-100 p-4 rounded">
+            <h3 class="font-semibold mb-3 text-sm text-slate-700">Completion distribution</h3>
+            <canvas id="completionChart" height="200"></canvas>
+        </div>
+    </div>
+</div>
+
+<div class="space-y-6">
+
+    <div data-widget-id="user-dashboard-pending" class="bg-white shadow rounded relative">
+        <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Pending tasks</div>
+        <div class="p-4">
+            <div class="grid grid-cols-[80px,1fr,140px,140px,160px] gap-2 text-sm font-semibold text-slate-600 mb-2 items-center bg-slate-100 px-3 py-2 rounded">
+                <div class="text-center">Task No</div>
+                <div class="text-left">Task</div>
+                <div class="text-center">Severity</div>
+                <div class="text-center">Impact</div>
+                <div class="text-center">Due</div>
+            </div>
+            <div class="space-y-2">
+                {% for t in pending %}
+                    {% set base_bg = 'bg-slate-50' if loop.index0 % 2 == 0 else 'bg-slate-100/60' %}
+                    <div class="grid grid-cols-[80px,1fr,140px,140px,160px] gap-2 items-center text-sm px-3 py-2 rounded {% if t.overdue %}bg-amber-50 border border-amber-200{% else %}{{ base_bg }}{% endif %}">
+                        <div class="text-xs text-slate-500 whitespace-nowrap text-center">#{{ t.id }}</div>
+                        <div class="truncate text-left">
+                            <a href="/task/{{ t.id }}" class="text-blue-600 hover:underline truncate inline-block">{{ t.title }}</a>
+                        </div>
+                        <div class="text-center"><span class="inline-block px-2 py-1 bg-red-50 text-red-700 rounded whitespace-nowrap">{{ t.severity or "—" }}</span></div>
+                        <div class="text-center"><span class="inline-block px-2 py-1 bg-blue-50 text-blue-700 rounded whitespace-nowrap">{{ t.impact or "—" }}</span></div>
+                        <div class="text-xs text-center text-slate-500 whitespace-nowrap">
+                            {% if t.due_display %}<span class="{% if t.overdue %}text-red-600{% endif %}">Due: {{ t.due_display }}</span>{% endif %}
+                            {% if t.overdue %}<span class="ml-1 text-red-600 font-semibold">Overdue</span>{% endif %}
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="text-sm text-slate-500">Nothing pending.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div data-widget-id="user-dashboard-completed" class="bg-white shadow rounded relative">
+        <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Completed</div>
+        <div class="p-4">
+            <div class="grid grid-cols-[80px,1fr,140px,140px,160px] gap-2 text-sm font-semibold text-slate-600 mb-2 items-center bg-slate-100 px-3 py-2 rounded">
+                <div class="text-center">Task No</div>
+                <div class="text-left">Task</div>
+                <div class="text-center">Severity</div>
+                <div class="text-center">Impact</div>
+                <div class="text-center">Completed</div>
+            </div>
+            <div class="space-y-2">
+                {% for t in completed %}
+                    {% set base_bg = 'bg-slate-50' if loop.index0 % 2 == 0 else 'bg-slate-100/60' %}
+                    <div class="grid grid-cols-[80px,1fr,140px,140px,160px] gap-2 items-center text-sm px-3 py-2 rounded {{ base_bg }}">
+                        <div class="text-xs text-slate-500 whitespace-nowrap text-center">#{{ t.id }}</div>
+                        <div class="truncate text-left">
+                            <a href="/task/{{ t.id }}" class="text-blue-600 hover:underline truncate inline-block">{{ t.title }}</a>
+                        </div>
+                        <div class="text-center"><span class="inline-block px-2 py-1 bg-red-50 text-red-700 rounded whitespace-nowrap">{{ t.severity or "—" }}</span></div>
+                        <div class="text-center"><span class="inline-block px-2 py-1 bg-blue-50 text-blue-700 rounded whitespace-nowrap">{{ t.impact or "—" }}</span></div>
+                        <div class="text-xs text-slate-500 whitespace-nowrap text-center">
+                            {{ t.completed_on or "—" }}
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="text-sm text-slate-500">Nothing completed yet.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    const palette = ['#2563eb','#16a34a','#f59e0b','#ef4444','#8b5cf6','#0ea5e9'];
+
+    function makePie(id, labels, data) {
+        const ctx = document.getElementById(id);
+        if (!ctx) return;
+        new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels,
+                datasets: [{
+                    data,
+                    backgroundColor: labels.map((_, i) => palette[i % palette.length]),
+                    borderWidth: 0
+                }]
+            },
+            options: { plugins: { legend: { position: 'bottom' } } }
+        });
+    }
+
+    makePie('severityChart', {{ severity_labels|tojson }}, {{ severity_data|tojson }});
+    makePie('impactChart', {{ impact_labels|tojson }}, {{ impact_data|tojson }});
+    makePie('completionChart', ["Completed","Pending","Overdue"], {{ completion_data|tojson }});
+</script>
+
+{% endblock %}

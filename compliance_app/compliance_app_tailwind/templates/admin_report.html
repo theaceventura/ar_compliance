@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2 class="text-xl font-semibold mb-4">Report for {{ user.username }}</h2>
+
+<div class="mb-4 text-sm">
+    <a href="/admin/report/{{ user.id }}/csv" class="text-blue-600 hover:underline">Download CSV</a>
+</div>
+
+<div class="bg-white p-4 shadow rounded">
+    <ul class="space-y-2">
+        {% for t in tasks %}
+            <li>
+                <div class="font-semibold">{{ t.title }}</div>
+                <div class="text-sm text-slate-600">{{ t.status }}</div>
+                {% if t.due_date %}<div class="text-xs text-slate-500">Due: {{ t.due_date }}</div>{% endif %}
+                {% if t.completed_at %}
+                    <div class="text-xs text-slate-500">Completed at {{ t.completed_at }}</div>
+                {% endif %}
+            </li>
+        {% endfor %}
+    </ul>
+</div>
+
+{% endblock %}

@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2 class="text-xl font-semibold mb-4">Company Users</h2>
+{% with %}
+    {% set allow_admin_role = False %}
+    {% set is_company_admin = True %}
+    {% include "admin_users.html" %}
+{% endwith %}
+{% endblock %}

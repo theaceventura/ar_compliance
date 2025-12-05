@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .widget-copy-btn {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            font-size: 11px;
+            padding: 4px 8px;
+            background: #e2e8f0;
+            color: #1e293b;
+            border-radius: 4px;
+            border: 1px solid #cbd5e1;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1);
+            cursor: pointer;
+            z-index: 20;
+        }
+    </style>
+</head>
+<body class="bg-slate-100">
+    <nav class="bg-white shadow mb-6">
+        <div class="max-w-4xl mx-auto px-4 py-3 flex justify-between">
+            <a href="/" class="font-semibold hover:underline">Compliance Tracker</a>
+            <div class="flex items-center space-x-4 text-sm">
+                {% set username = session.get('username') %}
+                {% set role = session.get('role') %}
+                {% if username and role %}
+                    <a href="/" class="hover:underline">Home</a>
+
+                    {# Global Admin menus #}
+                    {% if role == 'admin' %}
+                        <div class="relative inline-block" data-menu>
+                            <button type="button" class="hover:underline" data-menu-button>Tasks ▾</button>
+                            <div class="hidden absolute right-0 mt-2 w-48 bg-white border shadow-lg rounded z-10" data-menu-dropdown>
+                                <a href="/dashboard" class="block px-3 py-2 hover:bg-slate-100">Task Dashboard</a>
+                                <a href="/admin/tasks" class="block px-3 py-2 hover:bg-slate-100">Task Admin</a>
+                                <a href="/admin/task-config" class="block px-3 py-2 hover:bg-slate-100">Task Config</a>
+                            </div>
+                        </div>
+                        <div class="relative inline-block" data-menu>
+                            <button type="button" class="hover:underline" data-menu-button>Admin ▾</button>
+                            <div class="hidden absolute right-0 mt-2 w-48 bg-white border shadow-lg rounded z-10" data-menu-dropdown>
+                                <a href="/admin/dashboard" class="block px-3 py-2 hover:bg-slate-100">Admin Dashboard</a>
+                                <a href="/admin/companies" class="block px-3 py-2 hover:bg-slate-100">Company Config</a>
+                                <a href="/admin/users" class="block px-3 py-2 hover:bg-slate-100">User Config</a>
+                                <a href="/admin/app" class="block px-3 py-2 hover:bg-slate-100">App Config</a>
+                            </div>
+                        </div>
+                        <a href="/admin/profile" class="hover:underline">My Profile</a>
+
+                    {# Company Admin menus #}
+                    {% elif role == 'company_admin' %}
+                        <div class="relative inline-block" data-menu>
+                            <button type="button" class="hover:underline" data-menu-button>Tasks ▾</button>
+                            <div class="hidden absolute right-0 mt-2 w-52 bg-white border shadow-lg rounded z-10" data-menu-dropdown>
+                                <a href="/dashboard?view=personal" class="block px-3 py-2 hover:bg-slate-100">My Tasks</a>
+                                <a href="/dashboard" class="block px-3 py-2 hover:bg-slate-100">Company Tasks</a>
+                            </div>
+                        </div>
+                        <div class="relative inline-block" data-menu>
+                            <button type="button" class="hover:underline" data-menu-button>Company Admin ▾</button>
+                            <div class="hidden absolute right-0 mt-2 w-52 bg-white border shadow-lg rounded z-10" data-menu-dropdown>
+                                <a href="/company-admin/users" class="block px-3 py-2 hover:bg-slate-100">Company Users</a>
+                            </div>
+                        </div>
+                        <a href="/admin/profile" class="hover:underline">My Profile</a>
+
+                    {# Regular user menus #}
+                    {% else %}
+                        <div class="relative inline-block" data-menu>
+                            <button type="button" class="hover:underline" data-menu-button>Tasks ▾</button>
+                            <div class="hidden absolute right-0 mt-2 w-48 bg-white border shadow-lg rounded z-10" data-menu-dropdown>
+                                <a href="/dashboard" class="block px-3 py-2 hover:bg-slate-100">My Tasks</a>
+                            </div>
+                        </div>
+                        <a href="/admin/profile" class="hover:underline">My Profile</a>
+                    {% endif %}
+
+                    <a href="/logout" class="hover:underline">Logout</a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <div class="max-w-4xl mx-auto px-4">
+        {% with msgs = get_flashed_messages() %}
+            {% if msgs %}
+                <div class="mb-4">
+                    {% for m in msgs %}
+                        <div class="bg-green-100 text-green-800 px-3 py-2 rounded mb-2 text-sm">{{ m }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+    </div>
+
+    {% if app_settings %}
+        {% if app_settings.show_version or app_settings.show_page_name or app_settings.show_module_tree %}
+            <div class="fixed bottom-3 left-0 right-0 flex justify-center pointer-events-none px-4">
+                <div class="pointer-events-auto text-xs text-slate-600 bg-white/90 border rounded px-4 py-2 shadow inline-flex flex-col space-y-1">
+                    <div class="flex items-center justify-between space-x-4">
+                        <div class="flex items-center space-x-4">
+                            {% if app_settings.show_version %}<div><span class="font-semibold">Version:</span> {{ app_settings.version }}</div>{% endif %}
+                            {% if app_settings.show_page_name %}<div><span class="font-semibold">Page:</span> {{ page_name }}</div>{% endif %}
+                        </div>
+                        {% if app_settings.show_cut_icon %}
+                        <button type="button" id="copyFooterBtn" class="bg-slate-200 text-slate-700 px-2 py-1 rounded text-xs">Copy Page URL</button>
+                        {% endif %}
+                    </div>
+                    {% if app_settings.show_module_tree %}
+                    <div class="mt-1">
+                        <div class="font-semibold">Modules tree</div>
+                        <ul class="list-disc ml-4">
+                            <li>app.py
+                                <ul class="list-disc ml-4">
+                                    {% if app_settings.show_page_name %}<li>{{ page_name }}</li>{% endif %}
+                                    <li>db.py</li>
+                                </ul>
+                            </li>
+                        </ul>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+    {% endif %}
+
+    <script>
+        const menus = document.querySelectorAll("[data-menu]");
+        menus.forEach(menu => {
+            const btn = menu.querySelector("[data-menu-button]");
+            const drop = menu.querySelector("[data-menu-dropdown]");
+            if (!btn || !drop) return;
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                drop.classList.toggle("hidden");
+            });
+            drop.addEventListener("click", (e) => e.stopPropagation());
+        });
+        document.addEventListener("click", () => {
+            document.querySelectorAll("[data-menu-dropdown]").forEach(d => d.classList.add("hidden"));
+        });
+
+        const copyFooterBtn = document.getElementById("copyFooterBtn");
+        if (copyFooterBtn && navigator.clipboard) {
+            copyFooterBtn.addEventListener("click", async () => {
+                const pageRef = "{{ page_name|default('', true) }}";
+                const textToCopy = pageRef || (window.location.pathname + window.location.search + window.location.hash);
+                try {
+                    await navigator.clipboard.writeText(textToCopy);
+                    copyFooterBtn.textContent = "Copied!";
+                    setTimeout(() => copyFooterBtn.textContent = "Copy Page URL", 1500);
+                } catch (err) {
+                    copyFooterBtn.textContent = "Failed";
+                    setTimeout(() => copyFooterBtn.textContent = "Copy Page URL", 1500);
+                }
+            });
+        }
+
+        // Add copy buttons to widgets when enabled
+        const widgetCopyEnabled = {{ (app_settings.show_cut_icon if app_settings else 0) | int }};
+        if (widgetCopyEnabled && navigator.clipboard) {
+            const widgets = document.querySelectorAll("[data-widget-id]");
+            widgets.forEach(widget => {
+                widget.classList.add("relative");
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "widget-copy-btn";
+                btn.textContent = "Copy ref";
+                const ref = widget.getAttribute("data-widget-id") || "";
+                btn.addEventListener("click", async (e) => {
+                    e.stopPropagation();
+                    if (!ref) return;
+                    try {
+                        await navigator.clipboard.writeText(ref);
+                        btn.textContent = "Copied";
+                        setTimeout(() => btn.textContent = "Copy ref", 1200);
+                    } catch {
+                        btn.textContent = "Failed";
+                        setTimeout(() => btn.textContent = "Copy ref", 1200);
+                    }
+                });
+                widget.appendChild(btn);
+            });
+        }
+    </script>
+</body>
+</html>

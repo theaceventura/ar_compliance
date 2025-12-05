@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="bg-white shadow rounded relative" data-widget-id="admin-task-edit">
+    <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700 flex items-center justify-between">
+        <span>Edit Task</span>
+        <span class="text-xs text-slate-500">Task #{{ task.id }}</span>
+    </div>
+    <div class="p-4">
+        {% if error %}
+            <div class="bg-red-100 text-red-800 px-3 py-2 rounded mb-3">{{ error }}</div>
+        {% endif %}
+
+        <form method="POST" class="space-y-3">
+            <input name="title" value="{{ task.title }}" placeholder="Title" class="w-full border p-2 rounded">
+            <input name="description" value="{{ task.description }}" placeholder="Description" class="w-full border p-2 rounded">
+            <div>
+                <label class="block text-sm text-slate-600 mb-1">Due date (optional)</label>
+                <input name="due_date" type="date" value="{{ task.due_date }}" class="w-full border p-2 rounded">
+            </div>
+            <div>
+                <label class="block text-sm text-slate-600 mb-1">Task owner (optional)</label>
+                <select name="owner_user_id" class="w-full border p-2 rounded">
+                    <option value="">-- Select --</option>
+                    {% for u in users %}
+                        <option value="{{ u.id }}" {% if task.owner_user_id == u.id %}selected{% endif %}>{{ u.username }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm text-slate-600 mb-1">Company scope</label>
+                <select name="company_id" class="w-full border p-2 rounded">
+                    <option value="" {% if not task.company_id %}selected{% endif %}>Global (all companies)</option>
+                    {% for c in companies %}
+                        <option value="{{ c.id }}" {% if task.company_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-sm text-slate-600 mb-1">Impact</label>
+                    <select name="impact" class="w-full border p-2 rounded">
+                        <option value="">-- Select --</option>
+                        {% for opt in impacts %}
+                        <option value="{{ opt.value }}" {% if task.impact == opt.value %}selected{% endif %}>{{ opt.value }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm text-slate-600 mb-1">Severity</label>
+                    <select name="severity" class="w-full border p-2 rounded">
+                        <option value="">-- Select --</option>
+                        {% for opt in severities %}
+                        <option value="{{ opt.value }}" {% if task.severity == opt.value %}selected{% endif %}>{{ opt.value }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <input name="verification_question" value="{{ task.verification_question }}" placeholder="Verification question" class="w-full border p-2 rounded">
+            <input name="verification_answer" value="{{ task.verification_answer }}" placeholder="Correct answer" class="w-full border p-2 rounded">
+
+            <div class="flex space-x-3">
+                <button class="bg-blue-600 text-white px-4 py-2 rounded">Save</button>
+                <a href="/admin/tasks" class="text-slate-600 px-4 py-2">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

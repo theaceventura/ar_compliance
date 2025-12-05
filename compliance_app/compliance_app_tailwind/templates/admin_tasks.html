@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<h2 class="text-xl font-semibold mb-4">Manage Tasks</h2>
+
+{% if error %}
+<div class="bg-red-100 text-red-800 px-3 py-2 rounded mb-3">{{ error }}</div>
+{% endif %}
+
+<div class="space-y-6">
+
+    <div data-widget-id="admin-tasks-existing" class="bg-white shadow rounded">
+        <div class="bg-slate-100 px-4 py-2 rounded-t font-semibold text-slate-700 flex items-center justify-between">
+            <h3>Existing tasks</h3>
+            <form method="GET" class="flex items-center space-x-2 text-sm">
+                <label for="filterCompany" class="text-slate-700">Company:</label>
+                <select id="filterCompany" name="company_id" class="border rounded px-2 py-1">
+                    <option value="all" {% if selected_company_id is none %}selected{% endif %}>All</option>
+                    {% for c in companies %}
+                        <option value="{{ c.id }}" {% if selected_company_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+                    {% endfor %}
+                </select>
+                <button class="bg-blue-600 text-white px-3 py-1 rounded">Filter</button>
+            </form>
+        </div>
+        <div class="p-4">
+            <div class="grid grid-cols-[80px,3.5fr,1.8fr,1.2fr,1.2fr,1.6fr,1.4fr,1.1fr] gap-2 text-sm font-semibold text-slate-600 mb-2 items-center bg-slate-100 px-3 py-2 rounded">
+                <div class="text-center">Task No</div>
+                <div class="text-left">Task</div>
+                <div class="text-left">Company</div>
+                <div class="text-center">Severity</div>
+                <div class="text-center">Impact</div>
+                <div class="text-center">Assign to</div>
+                <div class="text-center">Due</div>
+                <div class="text-center">Status</div>
+            </div>
+            <div class="space-y-2">
+                {% for t in tasks %}
+                    {% set base_bg = 'bg-slate-50' if loop.index0 % 2 == 0 else 'bg-slate-100/60' %}
+                    <div class="grid grid-cols-[80px,3.5fr,1.8fr,1.2fr,1.2fr,1.6fr,1.4fr,1.1fr] gap-2 items-center text-sm px-3 py-2 rounded {% if t.overdue %}bg-amber-50 border border-amber-200{% else %}{{ base_bg }}{% endif %}">
+                        <div class="text-xs text-slate-500 whitespace-nowrap text-center">#{{ t.id }}</div>
+                        <div class="truncate text-left">
+                            <a href="/admin/tasks/{{ t.id }}/edit" class="text-blue-600 hover:underline truncate inline-block">{{ t.title }}</a>
+                        </div>
+                        <div class="text-left text-xs text-slate-600 truncate">
+                            {% if t.company_name %}{{ t.company_name }}{% elif t.company_id %}Company #{{ t.company_id }}{% else %}<span class="text-amber-700 font-semibold">Global</span>{% endif %}
+                        </div>
+                        <div class="text-center"><span class="inline-block px-2 py-1 bg-red-50 text-red-700 rounded whitespace-nowrap">{{ t.severity or "—" }}</span></div>
+                        <div class="text-center"><span class="inline-block px-2 py-1 bg-blue-50 text-blue-700 rounded whitespace-nowrap">{{ t.impact or "—" }}</span></div>
+                        <div class="text-center text-xs text-slate-600 truncate">
+                            {% if t.assignment_scope == 'All users' %}
+                                All users
+                            {% else %}
+                                {{ t.owner_username or "Selected users" }}
+                            {% endif %}
+                        </div>
+                        <div class="text-center text-xs text-slate-600 whitespace-nowrap">
+                            {{ t.due_date or "—" }}
+                        </div>
+                        <div class="text-center text-xs text-slate-700 whitespace-nowrap">
+                            {% if t.overdue %}
+                                <span class="font-semibold text-red-700">Overdue</span>
+                            {% else %}
+                                <span class="text-green-700 font-semibold">On Track</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="text-sm text-slate-500">No tasks.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div data-widget-id="admin-tasks-create">
+        <div class="bg-white shadow rounded">
+            <div class="bg-slate-100 px-4 py-2 rounded-t font-semibold text-slate-700 flex items-center justify-between">
+                <h3>Create New Task</h3>
+            </div>
+            <form method="POST" class="p-4 space-y-2 text-sm">
+                <div class="grid grid-cols-[180px,1fr] items-center px-3 py-2 rounded bg-slate-50">
+                    <div class="text-left font-medium">Title</div>
+                    <div>
+                        <div class="text-xs text-slate-500 mb-1">{{ descriptions.title.description }}</div>
+                        <input name="title" placeholder="Title" class="w-full border p-2 rounded">
+                    </div>
+                </div>
+                <div class="grid grid-cols-[180px,1fr] items-center px-3 py-2 rounded bg-slate-100/60">
+                    <div class="text-left font-medium">Description</div>
+                    <div>
+                        <div class="text-xs text-slate-500 mb-1">{{ descriptions.description.description }}</div>
+                        <input name="description" placeholder="Description" class="w-full border p-2 rounded">
+                    </div>
+                </div>
+                <div class="grid grid-cols-[180px,1fr] items-center px-3 py-2 rounded bg-slate-100/60">
+                    <div class="text-left font-medium">Due date (optional)</div>
+                    <div>
+                        <div class="text-xs text-slate-500 mb-1">{{ descriptions.due_date.description }}</div>
+                        <input name="due_date" type="date" class="w-full border p-2 rounded">
+                    </div>
+                </div>
+                <div class="grid grid-cols-[180px,1fr] items-center px-3 py-2 rounded bg-slate-50">
+                    <div class="text-left font-medium">Impact</div>
+                    <div>
+                        <div class="text-xs text-slate-500 mb-1">{{ descriptions.impact.description }}</div>
+                        <select name="impact" class="w-full border p-2 rounded">
+                            <option value="">-- Select --</option>
+                            {% for opt in impacts %}
+                            <option value="{{ opt.value }}">{{ opt.value }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-[180px,1fr] items-center px-3 py-2 rounded bg-slate-100/60">
+                    <div class="text-left font-medium">Severity</div>
+                    <div>
+                        <div class="text-xs text-slate-500 mb-1">Select a label for reporting.</div>
+                        <select name="severity" class="w-full border p-2 rounded">
+                            <option value="">-- Select --</option>
+                            {% for opt in severities %}
+                            <option value="{{ opt.value }}">{{ opt.value }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-[180px,1fr] items-center px-3 py-2 rounded bg-slate-50">
+                    <div class="text-left font-medium">Verification question</div>
+                    <div>
+                        <div class="text-xs text-slate-500 mb-1">{{ descriptions.verification_question.description }}</div>
+                        <input name="verification_question" placeholder="Verification question" class="w-full border p-2 rounded">
+                    </div>
+                </div>
+                <div class="grid grid-cols-[180px,1fr] items-center px-3 py-2 rounded bg-slate-100/60">
+                    <div class="text-left font-medium">Verification answer</div>
+                    <div>
+                        <div class="text-xs text-slate-500 mb-1">{{ descriptions.verification_answer.description }}</div>
+                        <input name="verification_answer" placeholder="Correct answer" class="w-full border p-2 rounded">
+                    </div>
+                </div>
+                <div class="grid grid-cols-[180px,1fr] items-center px-3 py-2 rounded bg-slate-50">
+                    <div class="text-left font-medium">Company scope</div>
+                    <div>
+                        <select id="createCompanyScope" name="company_id" class="w-full border p-2 rounded">
+                            <option value="">Global (all companies)</option>
+                            {% for c in companies %}
+                                <option value="{{ c.id }}" {% if selected_company_id is defined and selected_company_id == c.id %}selected{% elif session.company_id and session.company_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-[180px,1fr] items-start px-3 py-3 rounded bg-slate-100/60">
+                    <div class="text-left font-medium">Assignments</div>
+                    <div class="space-y-2">
+                        <div class="text-xs text-slate-500">{{ descriptions.assignment.description }}</div>
+                        <label class="block text-sm text-slate-600 mb-1">Select users (Ctrl/Cmd+click for multiple)</label>
+                        <select name="user_ids" multiple class="w-full border p-2 rounded h-32">
+                            {% for u in users %}
+                                <option value="{{ u.id }}">{{ u.username }}</option>
+                            {% endfor %}
+                        </select>
+                        <label class="inline-flex items-center space-x-2 text-sm text-slate-700">
+                            <input type="checkbox" name="assign_all" class="border rounded">
+                            <span>Assign to all users</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="flex items-center justify-start gap-2 px-3 pt-2">
+                    <button class="bg-blue-600 text-white px-4 py-2 rounded min-w-[140px]">Create</button>
+                </div>
+            </form>
+        </div>
+
+</div>
+
+</div>
+
+<script>
+    const scopeSelect = document.getElementById('createCompanyScope');
+    if (scopeSelect) {
+        scopeSelect.addEventListener('change', () => {
+            const val = scopeSelect.value;
+            const params = new URLSearchParams(window.location.search);
+            if (val) {
+                params.set('company_id', val);
+            } else {
+                params.set('company_id', 'all');
+            }
+            window.location.search = params.toString();
+        });
+    }
+</script>
+
+{% endblock %}

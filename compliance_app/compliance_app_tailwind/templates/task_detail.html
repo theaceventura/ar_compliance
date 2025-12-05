@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-xl bg-white shadow p-6 rounded relative" data-widget-id="user-task-detail">
+
+    <h2 class="text-xl font-semibold mb-2">{{ task.title }}</h2>
+    <div class="text-xs text-slate-500 mb-2">Task #{{ task.id }}</div>
+
+    {% if task.description %}
+        <p class="mb-2">{{ task.description }}</p>
+    {% endif %}
+
+    <div class="text-sm text-slate-600 mb-4 space-y-1">
+        <div>Status: <span class="{% if is_completed %}text-green-700{% else %}text-amber-700{% endif %} font-semibold">{{ "Completed" if is_completed else "Pending" }}</span></div>
+        {% if due_date_display %}<div>Due: {{ due_date_display }}</div>{% endif %}
+        {% if completed_at_display %}<div>Completed on: {{ completed_at_display }}</div>{% endif %}
+        <div class="space-x-2">
+            {% if task.impact %}<span class="inline-block px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs">Impact: {{ task.impact }}</span>{% endif %}
+            {% if task.severity %}<span class="inline-block px-2 py-1 bg-red-50 text-red-700 rounded text-xs">Severity: {{ task.severity }}</span>{% endif %}
+        </div>
+    </div>
+
+    <p class="text-sm mb-4">{{ task.verification_question }}</p>
+
+    <form method="POST" class="space-y-3">
+        <input name="answer" class="w-full border p-2 rounded" placeholder="Your answer" value="{{ task.answer_text or '' }}">
+        <p class="text-xs text-slate-500">Update and resubmit your answer to edit this task.</p>
+        <button class="bg-blue-600 text-white px-4 py-2 rounded">Save answer</button>
+    </form>
+
+</div>
+{% endblock %}
