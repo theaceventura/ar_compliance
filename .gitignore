@@ -1,0 +1,12 @@
+# Byte-compiled / cache
+__pycache__/
+*.pyc
+
+# Environments
+.venv/
+
+# OS cruft
+.DS_Store
+
+# Local data files
+*.db
