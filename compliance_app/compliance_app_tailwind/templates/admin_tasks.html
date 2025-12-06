@@ -24,21 +24,20 @@
                 <button class="bg-blue-600 text-white px-3 py-1 rounded">Filter</button>
             </form>
         </div>
-        <div class="p-4">
-            <div class="grid grid-cols-[80px,3.5fr,1.8fr,1.2fr,1.2fr,1.6fr,1.4fr,1.1fr] gap-2 text-sm font-semibold text-slate-600 mb-2 items-center bg-slate-100 px-3 py-2 rounded">
+        <div class="p-4 space-y-2 text-sm">
+            <div class="tbl-header text-sm grid grid-cols-[80px,3.5fr,2fr,1.1fr,1.1fr,1.2fr,1fr,1fr] gap-2 items-center">
                 <div class="text-center">Task No</div>
                 <div class="text-left">Task</div>
                 <div class="text-left">Company</div>
                 <div class="text-center">Severity</div>
                 <div class="text-center">Impact</div>
-                <div class="text-center">Assign to</div>
                 <div class="text-center">Due</div>
                 <div class="text-center">Status</div>
+                <div class="text-center">Actions</div>
             </div>
-            <div class="space-y-2">
+            {% if tasks %}
                 {% for t in tasks %}
-                    {% set base_bg = 'bg-slate-50' if loop.index0 % 2 == 0 else 'bg-slate-100/60' %}
-                    <div class="grid grid-cols-[80px,3.5fr,1.8fr,1.2fr,1.2fr,1.6fr,1.4fr,1.1fr] gap-2 items-center text-sm px-3 py-2 rounded {% if t.overdue %}bg-red-50 border border-red-200{% else %}{{ base_bg }}{% endif %}">
+                    <div class="tbl-row grid grid-cols-[80px,3.5fr,2fr,1.1fr,1.1fr,1.2fr,1fr,1fr] gap-2 items-center text-sm {% if loop.index0 % 2 == 1 %}tbl-row-alt{% endif %} {% if t.overdue %}bg-red-50 border border-red-200{% endif %}">
                         <div class="text-xs text-slate-500 whitespace-nowrap text-center">#{{ t.id }}</div>
                         <div class="truncate text-left">
                             <a href="/admin/tasks/{{ t.id }}/edit" class="text-blue-600 hover:underline truncate inline-block">{{ t.title }}</a>
@@ -48,13 +47,6 @@
                         </div>
                         <div class="text-center"><span class="inline-block px-2 py-1 bg-red-50 text-red-700 rounded whitespace-nowrap">{{ t.severity or "—" }}</span></div>
                         <div class="text-center"><span class="inline-block px-2 py-1 bg-blue-50 text-blue-700 rounded whitespace-nowrap">{{ t.impact or "—" }}</span></div>
-                        <div class="text-center text-xs text-slate-600 truncate">
-                            {% if t.assignment_scope == 'All users' %}
-                                All users
-                            {% else %}
-                                {{ t.owner_username or "Selected users" }}
-                            {% endif %}
-                        </div>
                         <div class="text-center text-xs text-slate-600 whitespace-nowrap">
                             {{ t.due_date or "—" }}
                         </div>
@@ -65,11 +57,14 @@
                                 <span class="text-green-700 font-semibold">On Track</span>
                             {% endif %}
                         </div>
+                        <div class="text-center text-xs">
+                            <a class="text-blue-600 hover:underline" href="/admin/tasks/{{ t.id }}/edit">Edit</a>
+                        </div>
                     </div>
-                {% else %}
-                    <div class="text-sm text-slate-500">No tasks.</div>
                 {% endfor %}
-            </div>
+            {% else %}
+                <div class="tbl-empty text-sm">No tasks.</div>
+            {% endif %}
         </div>
     </div>
 

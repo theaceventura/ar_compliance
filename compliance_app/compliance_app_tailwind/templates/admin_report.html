@@ -10,33 +10,36 @@
 <div class="bg-white shadow rounded relative" data-widget-id="admin-user-report">
     <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">User task report</div>
     <div class="p-4 space-y-2 text-sm">
-        <div class="grid grid-cols-[1fr,120px,140px,160px,120px] gap-2 items-center bg-slate-100 px-3 py-2 rounded font-semibold text-slate-700">
+        <div class="tbl-header text-sm grid grid-cols-[1fr,120px,140px,160px,120px] gap-2 items-center">
             <div class="text-left">Task</div>
             <div class="text-center">Status</div>
             <div class="text-center">Due</div>
             <div class="text-center">Completed</div>
             <div class="text-center">Flag</div>
         </div>
-        {% for t in tasks %}
-            {% set base_bg = 'bg-slate-50' if loop.index0 % 2 == 0 else 'bg-slate-100/60' %}
-            <div class="grid grid-cols-[1fr,120px,140px,160px,120px] gap-2 items-center px-3 py-2 rounded {% if t.status != 'completed' %}bg-amber-50 border border-amber-200{% else %}{{ base_bg }}{% endif %}">
-                <div class="text-left truncate">{{ t.title }}</div>
-                <div class="text-center">{{ t.status }}</div>
-                <div class="text-center text-xs text-slate-600">{{ t.due_display or "—" }}</div>
-                <div class="text-center text-xs text-slate-600">
-                    {% if t.completed_display %}{{ t.completed_display }}{% elif t.overdue %}<span class="text-red-700 font-semibold">Overdue</span>{% else %}—{% endif %}
+        {% if tasks %}
+            {% for t in tasks %}
+                <div class="tbl-row grid grid-cols-[1fr,120px,140px,160px,120px] gap-2 items-center text-sm {% if loop.index0 % 2 == 1 %}tbl-row-alt{% endif %} {% if t.status != 'completed' %}bg-amber-50 border border-amber-200{% endif %}">
+                    <div class="text-left truncate">{{ t.title }}</div>
+                    <div class="text-center">{{ t.status }}</div>
+                    <div class="text-center text-xs text-slate-600">{{ t.due_display or "—" }}</div>
+                    <div class="text-center text-xs text-slate-600">
+                        {% if t.completed_display %}{{ t.completed_display }}{% elif t.overdue %}<span class="text-red-700 font-semibold">Overdue</span>{% else %}—{% endif %}
+                    </div>
+                    <div class="text-center text-xs text-slate-700">
+                        {% if t.overdue %}
+                            <span class="font-semibold text-red-700">Overdue</span>
+                        {% elif t.status == 'completed' %}
+                            <span class="text-green-700 font-semibold">Completed</span>
+                        {% else %}
+                            <span class="text-slate-600">Pending</span>
+                        {% endif %}
+                    </div>
                 </div>
-                <div class="text-center text-xs text-slate-700">
-                    {% if t.overdue %}
-                        <span class="font-semibold text-red-700">Overdue</span>
-                    {% elif t.status == 'completed' %}
-                        <span class="text-green-700 font-semibold">Completed</span>
-                    {% else %}
-                        <span class="text-slate-600">Pending</span>
-                    {% endif %}
-                </div>
-            </div>
-        {% endfor %}
+            {% endfor %}
+        {% else %}
+            <div class="tbl-empty text-sm">No tasks to show.</div>
+        {% endif %}
     </div>
 </div>
 

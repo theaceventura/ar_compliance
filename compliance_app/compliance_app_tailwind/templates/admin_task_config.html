@@ -7,25 +7,28 @@
     <div class="bg-white shadow rounded relative" data-widget-id="task-config-impact-options">
         <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Impact options</div>
         <div class="p-4 space-y-2 text-sm">
-            <div class="grid grid-cols-[1fr,150px,130px] gap-2 items-center bg-slate-100 px-3 py-2 rounded font-semibold text-slate-700">
+            <div class="tbl-header text-sm grid grid-cols-[1fr,150px,130px] gap-2 items-center">
                 <div class="text-left">Impact</div>
                 <div class="text-center">Colour</div>
                 <div class="text-center">Actions</div>
             </div>
-            {% for opt in impacts %}
-                {% set default = impact_colors.get(opt.value, '#16a34a') %}
-                {% set base_bg = 'bg-slate-50' if loop.index0 % 2 == 0 else 'bg-slate-100/60' %}
-                <div class="grid grid-cols-[1fr,150px,130px] gap-2 items-center px-3 py-2 rounded {{ base_bg }}">
-                    <div class="text-left font-medium truncate">{{ opt.value }}</div>
-                    <form method="POST" action="/admin/options/impact/{{ opt.id }}/color" class="flex items-center justify-center gap-2">
-                        <input type="color" name="color" value="{{ default }}" class="h-9 w-16 border rounded">
-                        <button class="bg-slate-200 text-slate-700 px-3 py-1 rounded text-xs">Update</button>
-                    </form>
-                    <form method="POST" action="/admin/options/impact/{{ opt.id }}/delete" class="text-center">
-                        <button class="text-red-600 text-sm">Remove</button>
-                    </form>
-                </div>
-            {% endfor %}
+            {% if impacts %}
+                {% for opt in impacts %}
+                    {% set default = impact_colors.get(opt.value, '#16a34a') %}
+                    <div class="tbl-row text-sm grid grid-cols-[1fr,150px,130px] gap-2 items-center {% if loop.index0 % 2 == 1 %}tbl-row-alt{% endif %}">
+                        <div class="text-left font-medium truncate">{{ opt.value }}</div>
+                        <form method="POST" action="/admin/options/impact/{{ opt.id }}/color" class="flex items-center justify-center gap-2">
+                            <input type="color" name="color" value="{{ default }}" class="h-9 w-16 border rounded">
+                            <button class="bg-slate-200 text-slate-700 px-3 py-1 rounded text-xs">Update</button>
+                        </form>
+                        <form method="POST" action="/admin/options/impact/{{ opt.id }}/delete" class="text-center">
+                            <button class="text-red-600 text-sm">Remove</button>
+                        </form>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <div class="tbl-empty text-sm">No impact options defined.</div>
+            {% endif %}
             <form method="POST" action="/admin/options/impact/add" class="grid grid-cols-[1fr,150px,130px] gap-2 items-center bg-slate-50 px-3 py-2 rounded border border-slate-200">
                 <input name="value" placeholder="Add impact" class="w-full border p-2 rounded">
                 <div class="flex items-center justify-center gap-2">
@@ -41,25 +44,28 @@
     <div class="bg-white shadow rounded relative" data-widget-id="task-config-severity-options">
         <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Severity options</div>
         <div class="p-4 space-y-2 text-sm">
-            <div class="grid grid-cols-[1fr,150px,130px] gap-2 items-center bg-slate-100 px-3 py-2 rounded font-semibold text-slate-700">
+            <div class="tbl-header text-sm grid grid-cols-[1fr,150px,130px] gap-2 items-center">
                 <div class="text-left">Severity</div>
                 <div class="text-center">Colour</div>
                 <div class="text-center">Actions</div>
             </div>
-            {% for opt in severities %}
-                {% set default = severity_colors.get(opt.value, '#2563eb') %}
-                {% set base_bg = 'bg-slate-50' if loop.index0 % 2 == 0 else 'bg-slate-100/60' %}
-                <div class="grid grid-cols-[1fr,150px,130px] gap-2 items-center px-3 py-2 rounded {{ base_bg }}">
-                    <div class="text-left font-medium truncate">{{ opt.value }}</div>
-                    <form method="POST" action="/admin/options/severity/{{ opt.id }}/color" class="flex items-center justify-center gap-2">
-                        <input type="color" name="color" value="{{ default }}" class="h-9 w-16 border rounded">
-                        <button class="bg-slate-200 text-slate-700 px-3 py-1 rounded text-xs">Update</button>
-                    </form>
-                    <form method="POST" action="/admin/options/severity/{{ opt.id }}/delete" class="text-center">
-                        <button class="text-red-600 text-sm">Remove</button>
-                    </form>
-                </div>
-            {% endfor %}
+            {% if severities %}
+                {% for opt in severities %}
+                    {% set default = severity_colors.get(opt.value, '#2563eb') %}
+                    <div class="tbl-row text-sm grid grid-cols-[1fr,150px,130px] gap-2 items-center {% if loop.index0 % 2 == 1 %}tbl-row-alt{% endif %}">
+                        <div class="text-left font-medium truncate">{{ opt.value }}</div>
+                        <form method="POST" action="/admin/options/severity/{{ opt.id }}/color" class="flex items-center justify-center gap-2">
+                            <input type="color" name="color" value="{{ default }}" class="h-9 w-16 border rounded">
+                            <button class="bg-slate-200 text-slate-700 px-3 py-1 rounded text-xs">Update</button>
+                        </form>
+                        <form method="POST" action="/admin/options/severity/{{ opt.id }}/delete" class="text-center">
+                            <button class="text-red-600 text-sm">Remove</button>
+                        </form>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <div class="tbl-empty text-sm">No severity options defined.</div>
+            {% endif %}
             <form method="POST" action="/admin/options/severity/add" class="grid grid-cols-[1fr,150px,130px] gap-2 items-center bg-slate-50 px-3 py-2 rounded border border-slate-200">
                 <input name="value" placeholder="Add severity" class="w-full border p-2 rounded">
                 <div class="flex items-center justify-center gap-2">

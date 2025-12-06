@@ -56,7 +56,7 @@
     <div data-widget-id="user-dashboard-pending" class="bg-white shadow rounded relative">
         <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Pending tasks</div>
         <div class="p-4">
-            <div class="grid grid-cols-[80px,1fr,140px,140px,160px] gap-2 text-sm font-semibold text-slate-600 mb-2 items-center bg-slate-100 px-3 py-2 rounded">
+            <div class="tbl-header text-sm grid grid-cols-[80px,1fr,140px,140px,160px] gap-2 items-center">
                 <div class="text-center">Task No</div>
                 <div class="text-left">Task</div>
                 <div class="text-center">Severity</div>
@@ -65,8 +65,7 @@
             </div>
             <div class="space-y-2">
                 {% for t in pending %}
-                    {% set base_bg = 'bg-slate-50' if loop.index0 % 2 == 0 else 'bg-slate-100/60' %}
-                    <div class="grid grid-cols-[80px,1fr,140px,140px,160px] gap-2 items-center text-sm px-3 py-2 rounded {% if t.overdue %}bg-red-50 border border-red-200{% else %}{{ base_bg }}{% endif %}">
+                    <div class="tbl-row text-sm grid grid-cols-[80px,1fr,140px,140px,160px] gap-2 items-center px-3 py-2 rounded {% if loop.index0 % 2 == 1 %}tbl-row-alt{% endif %} {% if t.overdue %}bg-red-50 border border-red-200{% endif %}">
                         <div class="text-xs text-slate-500 whitespace-nowrap text-center">#{{ t.id }}</div>
                         <div class="truncate text-left">
                             <a href="/task/{{ t.id }}" class="text-blue-600 hover:underline truncate inline-block">{{ t.title }}</a>
@@ -79,7 +78,7 @@
                         </div>
                     </div>
                 {% else %}
-                    <div class="text-sm text-slate-500">Nothing pending.</div>
+                    <div class="tbl-empty text-sm">Nothing pending.</div>
                 {% endfor %}
             </div>
         </div>
@@ -88,7 +87,7 @@
     <div data-widget-id="user-dashboard-completed" class="bg-white shadow rounded relative">
         <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Completed</div>
         <div class="p-4">
-            <div class="grid grid-cols-[80px,1fr,140px,140px,160px] gap-2 text-sm font-semibold text-slate-600 mb-2 items-center bg-slate-100 px-3 py-2 rounded">
+            <div class="tbl-header text-sm grid grid-cols-[80px,1fr,140px,140px,160px] gap-2 items-center">
                 <div class="text-center">Task No</div>
                 <div class="text-left">Task</div>
                 <div class="text-center">Severity</div>
@@ -97,8 +96,7 @@
             </div>
             <div class="space-y-2">
                 {% for t in completed %}
-                    {% set base_bg = 'bg-slate-50' if loop.index0 % 2 == 0 else 'bg-slate-100/60' %}
-                    <div class="grid grid-cols-[80px,1fr,140px,140px,160px] gap-2 items-center text-sm px-3 py-2 rounded {{ base_bg }}">
+                    <div class="tbl-row text-sm grid grid-cols-[80px,1fr,140px,140px,160px] gap-2 items-center px-3 py-2 rounded {% if loop.index0 % 2 == 1 %}tbl-row-alt{% endif %}">
                         <div class="text-xs text-slate-500 whitespace-nowrap text-center">#{{ t.id }}</div>
                         <div class="truncate text-left">
                             <a href="/task/{{ t.id }}" class="text-blue-600 hover:underline truncate inline-block">{{ t.title }}</a>
@@ -110,7 +108,7 @@
                         </div>
                     </div>
                 {% else %}
-                    <div class="text-sm text-slate-500">Nothing completed yet.</div>
+                    <div class="tbl-empty text-sm">Nothing completed yet.</div>
                 {% endfor %}
             </div>
         </div>

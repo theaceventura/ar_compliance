@@ -161,6 +161,8 @@ def dashboard():
         else:
             selected_company_id = session.get("selected_company_id")
 
+        db.admin_ensure_assignments_for_company(selected_company_id)
+
         summary = db.admin_get_summary_counts(selected_company_id)
         severity_counts = db.admin_task_counts_by("severity", selected_company_id)
         impact_counts = db.admin_task_counts_by("impact", selected_company_id)
@@ -227,6 +229,7 @@ def dashboard():
         task_pending = task_total - task_completed
         # Compliance based on fully completed tasks
         task_compliance_percent = round((task_completed / task_total) * 100, 1) if task_total else 0
+        unassigned_tasks = sum(1 for t in tasks_json if t.get("assign_total", 0) == 0)
         # Build a simple severity x impact matrix for a risk view
         def build_risk_matrix(task_list):
             severities = []
@@ -277,11 +280,13 @@ def dashboard():
             user=user,
             tasks=tasks_json,
             task_counts=task_counts,
+            unassigned_tasks=unassigned_tasks,
             risk_matrix=risk_matrix,
             page_name="templates/admin_task_dashboard.html",
         )
     if user["role"] == "company_admin" and request.args.get("view") != "personal":
         selected_company_id = user.get("company_id")
+        db.admin_ensure_assignments_for_company(selected_company_id)
         summary = db.admin_get_summary_counts(selected_company_id)
         severity_counts = db.admin_task_counts_by("severity", selected_company_id)
         impact_counts = db.admin_task_counts_by("impact", selected_company_id)
@@ -346,6 +351,7 @@ def dashboard():
         task_completed = sum(1 for t in tasks_json if t.get("fully_completed"))
         task_pending = task_total - task_completed
         task_compliance_percent = round((task_completed / task_total) * 100, 1) if task_total else 0
+        unassigned_tasks = sum(1 for t in tasks_json if t.get("assign_total", 0) == 0)
         def build_risk_matrix(task_list):
             severities = []
             impacts = []
@@ -395,6 +401,7 @@ def dashboard():
             user=user,
             tasks=tasks_json,
             task_counts=task_counts,
+            unassigned_tasks=unassigned_tasks,
             risk_matrix=risk_matrix,
             page_name="templates/admin_task_dashboard.html",
         )
@@ -402,6 +409,8 @@ def dashboard():
     # Default: personal task view (users and company admins in personal mode)
     # Fetch full profile for name display
     profile_row = db.admin_get_user(user["id"], user.get("company_id"))
+    # Ensure missing assignments are created (global + company tasks)
+    db.ensure_user_assignments(user["id"], user.get("company_id"))
     user_full = {**user}
     if profile_row:
         user_full["first_name"] = profile_row["first_name"]
@@ -749,15 +758,24 @@ def admin_edit_task(task_id):
     task = db.admin_get_task(task_id, admin["company_id"])
     if task is None:
         return "Task not found", 404
+    is_global_scope = task["company_id"] is None
+    task_company_scope = None if is_global_scope else (task["company_id"] or admin.get("company_id"))
 
     if request.method == "GET":
+        assigned_ids = db.admin_get_task_assignments(task_id)
+        assignment_status = db.admin_get_task_assignment_status(task_id)
+        users_scope = db.admin_get_all_users() if is_global_scope else db.admin_get_all_users(task_company_scope)
+        all_users = db.admin_get_all_users()
         return render_template(
             "admin_task_edit.html",
             task=task,
             impacts=db.admin_get_options("impact", admin["company_id"]),
             severities=db.admin_get_options("severity", admin["company_id"]),
-            users=db.admin_get_all_users(),
+            users=users_scope,
+            all_users=all_users,
             companies=db.admin_get_companies(),
+            assigned_ids=assigned_ids,
+            assignment_status=assignment_status,
             page_name="templates/admin_task_edit.html",
         )
 
@@ -771,6 +789,11 @@ def admin_edit_task(task_id):
     owner_id = request.form.get("owner_user_id", "").strip() or None
     company_val = request.form.get("company_id", "").strip()
     company_id = int(company_val) if company_val else None
+    assign_all = request.form.get("assign_all") == "on"
+    # If global scope, apply to all users
+    if company_id is None:
+        assign_all = True
+    user_ids = request.form.getlist("user_ids")
 
     if not title or not question or not answer:
         return render_template(
@@ -778,13 +801,17 @@ def admin_edit_task(task_id):
             task=task,
             impacts=db.admin_get_options("impact", admin["company_id"]),
             severities=db.admin_get_options("severity", admin["company_id"]),
-            users=db.admin_get_all_users(),
+            users=db.admin_get_all_users() if company_id is None else db.admin_get_all_users(task_company_scope),
+            all_users=db.admin_get_all_users(),
             companies=db.admin_get_companies(),
+            assignment_status=db.admin_get_task_assignment_status(task_id),
             error="Title, question and answer required.",
+            assigned_ids=db.admin_get_task_assignments(task_id),
             page_name="templates/admin_task_edit.html",
         )
 
     db.admin_update_task(task_id, title, description, due_date, impact, severity, owner_id, question, answer, company_id)
+    db.admin_update_task_assignments(task_id, company_id, user_ids, assign_all)
     flash("Task updated.")
     return redirect(url_for("admin_tasks"))
 
@@ -796,11 +823,12 @@ def admin_users():
     """List users and show a selected user's details for admins."""
     admin = current_user()
     selected_id = request.args.get("user_id", type=int)
+    filter_company_id = request.args.get("company_id", type=int)
     selected_user = db.admin_get_user(selected_id) if selected_id else None
-    users = db.admin_get_all_users()
+    users = db.admin_get_all_users(filter_company_id) if filter_company_id else db.admin_get_all_users()
     companies = db.admin_get_companies()
     company_lookup = {c["id"]: c["name"] for c in companies}
-    return render_template("admin_users.html", users=users, selected_user=selected_user, companies=companies, company_lookup=company_lookup, allow_admin_role=True, is_company_admin=False, page_name="templates/admin_users.html")
+    return render_template("admin_users.html", users=users, selected_user=selected_user, companies=companies, company_lookup=company_lookup, allow_admin_role=True, is_company_admin=False, selected_company_id=filter_company_id, page_name="templates/admin_users.html")
 
 
 # Admin: create or update a user
@@ -811,7 +839,7 @@ def admin_create_user():
     admin = current_user()
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "").strip()
-    role = request.form.get("role", "user")
+    role = request.form.get("role", "").strip()
     first_name = request.form.get("first_name", "").strip() or None
     last_name = request.form.get("last_name", "").strip() or None
     email = request.form.get("email", "").strip() or None
@@ -819,18 +847,35 @@ def admin_create_user():
     send_notifications = request.form.get("send_notifications") == "on"
     is_active = request.form.get("is_active") == "on"
     user_id = request.form.get("user_id", type=int)
-    company_id = request.form.get("company_id", type=int) or admin["company_id"]
+    company_id = request.form.get("company_id", type=int)
 
     hashed_pw = generate_password_hash(password) if password else None
 
-    if not username or (not user_id and not password):
+    missing = []
+    if not username:
+        missing.append("Username")
+    if not user_id and not password:
+        missing.append("Password")
+    if not first_name:
+        missing.append("First Name")
+    if not last_name:
+        missing.append("Last Name")
+    if not email:
+        missing.append("Email")
+    if role not in ("user", "admin", "company_admin"):
+        missing.append("Role")
+    if company_id is None:
+        missing.append("Company")
+
+    if missing:
         return render_template(
             "admin_users.html",
             users=db.admin_get_all_users(),
-            error="Username and password are required.",
+            error="Missing required fields: " + ", ".join(missing),
             selected_user=db.admin_get_user(user_id) if user_id else None,
             companies=db.admin_get_companies(),
             company_lookup={c["id"]: c["name"] for c in db.admin_get_companies()},
+            selected_company_id=None,
             page_name="templates/admin_users.html",
         )
 
@@ -877,7 +922,7 @@ def company_admin_users():
     role = request.form.get("role", "user")
     # Force role to allowed set
     if role not in ("user", "company_admin"):
-        role = "user"
+        role = ""
     first_name = request.form.get("first_name", "").strip() or None
     last_name = request.form.get("last_name", "").strip() or None
     email = request.form.get("email", "").strip() or None
@@ -888,12 +933,26 @@ def company_admin_users():
 
     hashed_pw = generate_password_hash(password) if password else None
 
-    if not username or (not user_id and not password):
+    missing = []
+    if not username:
+        missing.append("Username")
+    if not user_id and not password:
+        missing.append("Password")
+    if not first_name:
+        missing.append("First Name")
+    if not last_name:
+        missing.append("Last Name")
+    if not email:
+        missing.append("Email")
+    if not role:
+        missing.append("Role")
+
+    if missing:
         users = db.admin_get_all_users(company_id)
         return render_template(
             "admin_users.html",
             users=users,
-            error="Username and password are required.",
+            error="Missing required fields: " + ", ".join(missing),
             selected_user=db.admin_get_user(user_id, company_id) if user_id else None,
             companies=[db.admin_get_company(company_id)] if company_id else [],
             company_lookup={company_id: db.admin_get_company(company_id)["name"]} if company_id else {},
@@ -936,6 +995,7 @@ def admin_companies():
     """Create or update companies and assign company admins."""
     admin = current_user()
     selected_id = request.args.get("company_id", type=int)
+    show_inactive = bool(request.args.get("show_inactive"))
     selected_company = db.admin_get_company(selected_id) if selected_id else None
 
     if request.method == "POST":
@@ -950,7 +1010,7 @@ def admin_companies():
         is_active = request.form.get("is_active") == "on"
         if not name:
             error = "Company name is required."
-            companies = db.admin_get_companies()
+            companies = db.admin_get_companies(show_inactive=show_inactive)
             users_for_company = db.admin_get_all_users(company_id) if company_id else []
             return render_template("admin_companies.html", companies=companies, selected_company=selected_company, company_users=users_for_company, error=error, page_name="templates/admin_companies.html")
         # Validate admin user belongs to company (when updating existing)
@@ -958,7 +1018,7 @@ def admin_companies():
             user_row = db.admin_get_user(admin_user_id)
             if not user_row or ("company_id" in user_row.keys() and user_row["company_id"] != company_id):
                 error = "Selected company admin must belong to this company."
-                companies = db.admin_get_companies()
+                companies = db.admin_get_companies(show_inactive=show_inactive)
                 users_for_company = db.admin_get_all_users(company_id) if company_id else []
                 return render_template("admin_companies.html", companies=companies, selected_company=selected_company, company_users=users_for_company, error=error, page_name="templates/admin_companies.html")
         if company_id:
@@ -968,13 +1028,13 @@ def admin_companies():
             error = db.admin_create_company(name, address1, address2, address3, state, postcode, admin_user_id, is_active)
             flash_msg = "Company created."
         if error:
-            companies = db.admin_get_companies()
+            companies = db.admin_get_companies(show_inactive=show_inactive)
             users_for_company = db.admin_get_all_users(company_id) if company_id else []
             return render_template("admin_companies.html", companies=companies, selected_company=selected_company, company_users=users_for_company, error=error, page_name="templates/admin_companies.html")
         flash(flash_msg)
         return redirect(url_for("admin_companies"))
 
-    companies = db.admin_get_companies()
+    companies = db.admin_get_companies(show_inactive=show_inactive)
     company_users = db.admin_get_all_users(selected_id) if selected_id else []
     return render_template("admin_companies.html", companies=companies, selected_company=selected_company, company_users=company_users, page_name="templates/admin_companies.html")
 
@@ -1055,7 +1115,8 @@ def admin_app_settings():
     show_page_name = request.form.get("show_page_name") == "on"
     show_module_tree = request.form.get("show_module_tree") == "on"
     show_cut_icon = request.form.get("show_cut_icon") == "on"
-    db.admin_update_app_settings(version, show_version, show_page_name, show_module_tree, show_cut_icon)
+    show_label_edit = request.form.get("show_label_edit") == "on"
+    db.admin_update_app_settings(version, show_version, show_page_name, show_module_tree, show_cut_icon, show_label_edit)
     flash("Settings updated.")
     return redirect(url_for("admin_app_settings"))
 

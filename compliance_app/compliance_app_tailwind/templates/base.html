@@ -17,6 +17,35 @@
             cursor: pointer;
             z-index: 20;
         }
+        .label-edit-link {
+            font-size: 10px;
+            color: #2563eb;
+            text-decoration: underline;
+            cursor: pointer;
+            margin-left: 6px;
+            white-space: nowrap;
+        }
+        .tbl-header {
+            background: #f1f5f9;
+            border-radius: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            font-weight: 600;
+            color: #0f172a;
+        }
+        .tbl-row {
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.5rem;
+        }
+        .tbl-row-alt {
+            background: #f8fafc;
+        }
+        .tbl-row-bg {
+            background: #f1f5f9;
+        }
+        .tbl-empty {
+            padding: 0.5rem 0.75rem;
+            color: #64748b;
+        }
     </style>
 </head>
 <body class="bg-slate-100">
@@ -27,59 +56,59 @@
                 {% set username = session.get('username') %}
                 {% set role = session.get('role') %}
                 {% if username and role %}
-                    <a href="/" class="hover:underline">Home</a>
+                    <a href="/" class="hover:underline"><span data-label-id="nav-home">Home</span></a>
 
                     {# Global Admin menus #}
                     {% if role == 'admin' %}
                         <div class="relative inline-block" data-menu>
-                            <button type="button" class="hover:underline" data-menu-button>Tasks ▾</button>
+                            <button type="button" class="hover:underline" data-menu-button><span data-label-id="nav-tasks">Tasks ▾</span></button>
                             <div class="hidden absolute right-0 mt-2 w-48 bg-white border shadow-lg rounded z-10" data-menu-dropdown>
-                                <a href="/dashboard" class="block px-3 py-2 hover:bg-slate-100">Task Dashboard</a>
-                                <a href="/dashboard/users" class="block px-3 py-2 hover:bg-slate-100">User Dashboard</a>
-                                <a href="/admin/tasks" class="block px-3 py-2 hover:bg-slate-100">Task Admin</a>
-                                <a href="/admin/task-config" class="block px-3 py-2 hover:bg-slate-100">Task Config</a>
+                                <a href="/dashboard" class="block px-3 py-2 hover:bg-slate-100"><span data-label-id="nav-task-dashboard">Task Dashboard</span></a>
+                                <a href="/dashboard/users" class="block px-3 py-2 hover:bg-slate-100"><span data-label-id="nav-user-dashboard">User Dashboard</span></a>
+                                <a href="/admin/tasks" class="block px-3 py-2 hover:bg-slate-100"><span data-label-id="nav-task-admin">Task Admin</span></a>
+                                <a href="/admin/task-config" class="block px-3 py-2 hover:bg-slate-100"><span data-label-id="nav-task-config">Task Config</span></a>
                             </div>
                         </div>
                         <div class="relative inline-block" data-menu>
-                            <button type="button" class="hover:underline" data-menu-button>Admin ▾</button>
+                            <button type="button" class="hover:underline" data-menu-button><span data-label-id="nav-admin">Admin ▾</span></button>
                             <div class="hidden absolute right-0 mt-2 w-48 bg-white border shadow-lg rounded z-10" data-menu-dropdown>
-                                <a href="/admin/dashboard" class="block px-3 py-2 hover:bg-slate-100">Admin Dashboard</a>
-                                <a href="/admin/companies" class="block px-3 py-2 hover:bg-slate-100">Company Config</a>
-                                <a href="/admin/users" class="block px-3 py-2 hover:bg-slate-100">User Config</a>
-                                <a href="/admin/app" class="block px-3 py-2 hover:bg-slate-100">App Config</a>
+                                <a href="/admin/dashboard" class="block px-3 py-2 hover:bg-slate-100"><span data-label-id="nav-admin-dashboard">Admin Dashboard</span></a>
+                                <a href="/admin/companies" class="block px-3 py-2 hover:bg-slate-100"><span data-label-id="nav-company-config">Company Config</span></a>
+                                <a href="/admin/users" class="block px-3 py-2 hover:bg-slate-100"><span data-label-id="nav-user-config">User Config</span></a>
+                                <a href="/admin/app" class="block px-3 py-2 hover:bg-slate-100"><span data-label-id="nav-app-config">App Config</span></a>
                             </div>
                         </div>
-                        <a href="/admin/profile" class="hover:underline">My Profile</a>
+                        <a href="/admin/profile" class="hover:underline"><span data-label-id="nav-profile">My Profile</span></a>
 
                     {# Company Admin menus #}
                     {% elif role == 'company_admin' %}
                         <div class="relative inline-block" data-menu>
-                            <button type="button" class="hover:underline" data-menu-button>Tasks ▾</button>
+                            <button type="button" class="hover:underline" data-menu-button><span data-label-id="nav-tasks">Tasks ▾</span></button>
                             <div class="hidden absolute right-0 mt-2 w-52 bg-white border shadow-lg rounded z-10" data-menu-dropdown>
-                                <a href="/dashboard?view=personal" class="block px-3 py-2 hover:bg-slate-100">My Tasks</a>
-                                <a href="/dashboard" class="block px-3 py-2 hover:bg-slate-100">Company Tasks</a>
+                                <a href="/dashboard?view=personal" class="block px-3 py-2 hover:bg-slate-100"><span data-label-id="nav-my-tasks">My Tasks</span></a>
+                                <a href="/dashboard" class="block px-3 py-2 hover:bg-slate-100"><span data-label-id="nav-company-tasks">Company Tasks</span></a>
                             </div>
                         </div>
                         <div class="relative inline-block" data-menu>
-                            <button type="button" class="hover:underline" data-menu-button>Company Admin ▾</button>
+                            <button type="button" class="hover:underline" data-menu-button><span data-label-id="nav-company-admin">Company Admin ▾</span></button>
                             <div class="hidden absolute right-0 mt-2 w-52 bg-white border shadow-lg rounded z-10" data-menu-dropdown>
-                                <a href="/company-admin/users" class="block px-3 py-2 hover:bg-slate-100">Company Users</a>
+                                <a href="/company-admin/users" class="block px-3 py-2 hover:bg-slate-100"><span data-label-id="nav-company-users">Company Users</span></a>
                             </div>
                         </div>
-                        <a href="/admin/profile" class="hover:underline">My Profile</a>
+                        <a href="/admin/profile" class="hover:underline"><span data-label-id="nav-profile">My Profile</span></a>
 
                     {# Regular user menus #}
                     {% else %}
                         <div class="relative inline-block" data-menu>
-                            <button type="button" class="hover:underline" data-menu-button>Tasks ▾</button>
+                            <button type="button" class="hover:underline" data-menu-button><span data-label-id="nav-tasks">Tasks ▾</span></button>
                             <div class="hidden absolute right-0 mt-2 w-48 bg-white border shadow-lg rounded z-10" data-menu-dropdown>
-                                <a href="/dashboard" class="block px-3 py-2 hover:bg-slate-100">My Tasks</a>
+                                <a href="/dashboard" class="block px-3 py-2 hover:bg-slate-100"><span data-label-id="nav-my-tasks">My Tasks</span></a>
                             </div>
                         </div>
-                        <a href="/admin/profile" class="hover:underline">My Profile</a>
+                        <a href="/admin/profile" class="hover:underline"><span data-label-id="nav-profile">My Profile</span></a>
                     {% endif %}
 
-                    <a href="/logout" class="hover:underline">Logout</a>
+                    <a href="/logout" class="hover:underline"><span data-label-id="nav-logout">Logout</span></a>
                 {% endif %}
             </div>
         </div>
@@ -186,6 +215,30 @@
                 });
                 widget.appendChild(btn);
             });
+        }
+
+        // Label edit helpers (non-persistent) when enabled
+        const labelEditEnabled = {{ (app_settings.show_label_edit if app_settings else 0) | int }};
+        if (labelEditEnabled) {
+            const addLabelEditors = () => {
+                document.querySelectorAll('[data-label-id]').forEach(el => {
+                    if (el.dataset.labelEnhanced === '1') return;
+                    const edit = document.createElement('span');
+                    edit.className = 'label-edit-link';
+                    edit.textContent = 'edit';
+                    edit.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const current = el.textContent.trim();
+                        const next = prompt('Edit label text:', current);
+                        if (next !== null && next.trim() !== '') {
+                            el.textContent = next.trim();
+                        }
+                    });
+                    el.insertAdjacentElement('afterend', edit);
+                    el.dataset.labelEnhanced = '1';
+                });
+            };
+            addLabelEditors();
         }
     </script>
 </body>

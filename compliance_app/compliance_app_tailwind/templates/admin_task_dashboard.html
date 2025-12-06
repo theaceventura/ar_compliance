@@ -4,7 +4,7 @@
 <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-4 space-y-3 md:space-y-0">
     <div class="flex flex-col">
         <h2 class="text-xl font-semibold">
-            Company Task Dashboard
+            <span data-label-id="title-company-task-dashboard">Company Task Dashboard</span>
             {% if companies %}
                 {% if selected_company_id %}
                     - {{ (companies | selectattr('id','equalto', selected_company_id) | list | first).name if (companies | selectattr('id','equalto', selected_company_id) | list) else '' }}
@@ -33,68 +33,95 @@
     {% endif %}
 </div>
 
-<div class="bg-white shadow rounded relative" data-widget-id="admin-dashboard-metrics">
-    <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Task Metrics</div>
-    <div class="grid grid-cols-1 md:grid-cols-5 gap-4 p-4">
-        <button type="button" data-metric-target="charts" class="bg-slate-50 border border-slate-100 p-4 rounded text-center hover:border-blue-300 hover:shadow focus:outline-none focus:ring" data-summary="all">
-            <div class="text-sm text-slate-500">Total Tasks</div>
+<div class="bg-white shadow rounded relative mb-4" data-widget-id="admin-dashboard-metrics">
+    <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700"><span data-label-id="heading-task-metrics">Task Metrics</span></div>
+    <div class="grid grid-cols-1 md:grid-cols-5 gap-3 p-2">
+        <button type="button" data-metric-target="charts" class="bg-slate-50 border border-slate-100 p-3 rounded text-center hover:border-blue-300 hover:shadow focus:outline-none focus:ring" data-summary="all">
+            <div class="text-sm text-slate-500 flex items-center justify-center gap-1">
+                <span id="label-task-total" data-label-id="label-task-total">Total Tasks</span>
+            </div>
             <div class="text-2xl font-semibold">{{ task_counts.total }}</div>
         </button>
-        <button type="button" data-metric-target="completion-card" class="bg-slate-50 border border-slate-100 p-4 rounded text-center hover:border-blue-300 hover:shadow focus:outline-none focus:ring" data-summary="completed">
-            <div class="text-sm text-slate-500">Completed</div>
+        <button type="button" data-metric-target="completion-card" class="bg-slate-50 border border-slate-100 p-3 rounded text-center hover:border-blue-300 hover:shadow focus:outline-none focus:ring" data-summary="completed">
+            <div class="text-sm text-slate-500 flex items-center justify-center gap-1">
+                <span id="label-task-completed" data-label-id="label-task-completed">Completed</span>
+            </div>
             <div class="text-2xl font-semibold text-green-700">{{ task_counts.completed }} / {{ task_counts.total }}</div>
         </button>
-        <button type="button" data-metric-target="completion-card" class="bg-slate-50 border border-slate-100 p-4 rounded text-center hover:border-blue-300 hover:shadow focus:outline-none focus:ring" data-summary="pending">
-            <div class="text-sm text-slate-500">Pending</div>
+        <button type="button" data-metric-target="completion-card" class="bg-slate-50 border border-slate-100 p-3 rounded text-center hover:border-blue-300 hover:shadow focus:outline-none focus:ring" data-summary="pending">
+            <div class="text-sm text-slate-500 flex items-center justify-center gap-1">
+                <span id="label-task-pending" data-label-id="label-task-pending">Pending</span>
+            </div>
             <div class="text-2xl font-semibold text-amber-700">{{ task_counts.pending }} / {{ task_counts.total }}</div>
         </button>
-        <button type="button" data-metric-target="completion-card" class="bg-slate-50 border border-slate-100 p-4 rounded text-center hover:border-blue-300 hover:shadow focus:outline-none focus:ring" data-summary="overdue">
-            <div class="text-sm text-slate-500">Overdue</div>
+        <button type="button" data-metric-target="completion-card" class="bg-slate-50 border border-slate-100 p-3 rounded text-center hover:border-blue-300 hover:shadow focus:outline-none focus:ring" data-summary="overdue">
+            <div class="text-sm text-slate-500 flex items-center justify-center gap-1">
+                <span id="label-task-overdue" data-label-id="label-task-overdue">Overdue</span>
+            </div>
             <div class="text-2xl font-semibold text-red-700">{{ task_counts.overdue }} / {{ task_counts.total }}</div>
         </button>
-        <button type="button" data-metric-target="user-status" class="bg-slate-50 border border-slate-100 p-4 rounded text-center hover:border-blue-300 hover:shadow focus:outline-none focus:ring" data-summary="all">
-            <div class="text-sm text-slate-500">Compliance</div>
+        <button type="button" data-metric-target="user-status" class="bg-slate-50 border border-slate-100 p-3 rounded text-center hover:border-blue-300 hover:shadow focus:outline-none focus:ring" data-summary="all">
+            <div class="text-sm text-slate-500 flex items-center justify-center gap-1">
+                <span id="label-task-compliance" data-label-id="label-task-compliance">Compliance</span>
+            </div>
             <div class="text-2xl font-semibold text-emerald-700">{{ compliance_percent }}%</div>
         </button>
     </div>
-    <div class="px-4 pb-4">
-        <div class="bg-slate-50 border border-slate-100 rounded p-3 text-sm text-slate-600">
+    <div class="px-3 pb-3">
+        <div class="bg-slate-50 border border-slate-100 rounded p-2 text-xs text-slate-600">
             Task metrics are task-based: Completed counts tasks where every assigned user finished; Pending is total minus completed; Overdue counts tasks past due; Compliance is completed tasks divided by total tasks.
         </div>
+        {% if unassigned_tasks %}
+        <div class="bg-amber-50 border border-amber-200 text-amber-800 rounded p-2 text-xs mt-2">
+            {{ unassigned_tasks }} task{% if unassigned_tasks != 1 %}s{% endif %} have no users assigned. Assign users to ensure accurate completion tracking.
+        </div>
+        {% endif %}
     </div>
 </div>
 
-<div class="bg-white shadow rounded relative mt-8" data-widget-id="admin-dashboard-charts">
-    <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Charts</div>
-    <div class="p-4">
-        <div id="charts" class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div id="severity-card" class="bg-slate-50 border border-slate-100 p-4 rounded">
-                <h3 class="text-sm font-semibold text-slate-700 mb-3">Task Severity</h3>
-                <div class="flex justify-center">
-                    <canvas id="severityChart" width="220" height="220"></canvas>
-                </div>
+<div class="bg-white shadow rounded relative mt-4" data-widget-id="admin-dashboard-charts">
+    <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700"><span data-label-id="heading-charts">Charts</span></div>
+    <div class="p-3">
+        <div id="charts" class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+            <div id="severity-card" class="bg-slate-50 border border-slate-100 p-3 rounded">
+                <h3 class="text-sm font-semibold text-slate-700 mb-3"><span data-label-id="chart-task-severity">Task Severity</span></h3>
+                {% if severity_counts %}
+                    <div class="flex justify-center">
+                        <canvas id="severityChart" width="180" height="180"></canvas>
+                    </div>
+                {% else %}
+                    <div class="text-center text-xs text-slate-500 py-8">No severity data to chart.</div>
+                {% endif %}
             </div>
-            <div id="impact-card" class="bg-slate-50 border border-slate-100 p-4 rounded">
-                <h3 class="text-sm font-semibold text-slate-700 mb-3">Task Impact</h3>
-                <div class="flex justify-center">
-                    <canvas id="impactChart" width="220" height="220"></canvas>
-                </div>
+            <div id="impact-card" class="bg-slate-50 border border-slate-100 p-3 rounded">
+                <h3 class="text-sm font-semibold text-slate-700 mb-3"><span data-label-id="chart-task-impact">Task Impact</span></h3>
+                {% if impact_counts %}
+                    <div class="flex justify-center">
+                        <canvas id="impactChart" width="180" height="180"></canvas>
+                    </div>
+                {% else %}
+                    <div class="text-center text-xs text-slate-500 py-8">No impact data to chart.</div>
+                {% endif %}
             </div>
-            <div id="completion-card" class="bg-slate-50 border border-slate-100 p-4 rounded">
-                <h3 class="text-sm font-semibold text-slate-700 mb-3">Task Completion</h3>
-                <div class="flex justify-center">
-                    <canvas id="completionChart" width="220" height="220"></canvas>
-                </div>
+            <div id="completion-card" class="bg-slate-50 border border-slate-100 p-3 rounded">
+                <h3 class="text-sm font-semibold text-slate-700 mb-3"><span data-label-id="chart-task-completion">Task Completion</span></h3>
+                {% if task_counts.total > 0 %}
+                    <div class="flex justify-center">
+                        <canvas id="completionChart" width="180" height="180"></canvas>
+                    </div>
+                {% else %}
+                    <div class="text-center text-xs text-slate-500 py-8">No tasks to chart.</div>
+                {% endif %}
             </div>
         </div>
     </div>
 </div>
 
-<div class="mt-6 bg-white shadow rounded relative" data-widget-id="admin-dashboard-risk-matrix">
+<div class="mt-4 bg-white shadow rounded relative" data-widget-id="admin-dashboard-risk-matrix">
     <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700 flex items-center justify-between">
-        <span>Risk Matrix (Severity × Impact)</span>
+        <span data-label-id="heading-risk-matrix">Risk Matrix (Severity × Impact)</span>
     </div>
-    <div class="p-4 overflow-x-auto">
+    <div class="p-3 overflow-x-auto">
         <style>
             .risk-low { background: #d1fae5; }
             .risk-med { background: #fef9c3; }
@@ -106,25 +133,25 @@
             <div class="flex flex-col space-y-3">
                 <div class="flex items-center text-sm font-semibold text-slate-700 mb-1">
                     <span class="inline-block" style="width:140px;"></span>
-                    <span>Impact →</span>
+                    <span data-label-id="risk-impact-label">Impact →</span>
                 </div>
                 <table class="min-w-full text-sm text-slate-700 border border-slate-100">
                     <colgroup>
                         <col style="width:140px;">
                     </colgroup>
-                    <thead class="bg-slate-50">
+                    <thead class="tbl-header text-sm">
                         <tr>
-                            <th class="px-3 py-2 text-center border-b border-slate-100">Severity ↓</th>
+                            <th class="px-3 py-2 text-center border-b border-slate-100"><span data-label-id="risk-severity-label">Severity ↓</span></th>
                             {% for imp in risk_matrix.impact_labels %}
-                                <th class="px-3 py-2 text-center border-b border-l border-slate-100">{{ imp }}</th>
+                                <th class="px-3 py-2 text-center border-b border-l border-slate-100"><span data-label-id="risk-impact-{{ loop.index0 }}">{{ imp }}</span></th>
                             {% endfor %}
                         </tr>
                     </thead>
                     <tbody>
                         {% for sev in risk_matrix.severity_labels %}
                             {% set sev_idx = loop.index0 %}
-                            <tr class="{% if loop.index0 % 2 == 0 %}bg-white{% else %}bg-slate-50{% endif %}">
-                                <td class="px-3 py-2 font-semibold border-t border-slate-100 text-center">{{ sev }}</td>
+                            <tr class="tbl-row text-sm {% if loop.index0 % 2 == 1 %}tbl-row-alt{% endif %}">
+                                <td class="px-3 py-2 font-semibold border-t border-slate-100 text-center"><span data-label-id="risk-severity-{{ loop.index0 }}">{{ sev }}</span></td>
                                 {% for imp in risk_matrix.impact_labels %}
                                     {% set score = sev_idx + loop.index0 %}
                                     {% set tier = 'risk-low' %}
@@ -136,7 +163,7 @@
                                     <td class="px-3 py-2 text-center border-t border-l border-slate-100 risk-cell {{ tier }}">
                                         <div class="font-semibold">{{ risk_matrix.counts[sev][imp] }}</div>
                                         <div class="text-xs text-slate-600">
-                                            {% if tier == 'risk-high' %}High{% elif tier == 'risk-med' %}Medium{% else %}Low{% endif %}
+                                            {% if tier == 'risk-high' %}<span data-label-id="risk-cell-high">High</span>{% elif tier == 'risk-med' %}<span data-label-id="risk-cell-medium">Medium</span>{% else %}<span data-label-id="risk-cell-low">Low</span>{% endif %}
                                         </div>
                                     </td>
                                 {% endfor %}
@@ -146,9 +173,9 @@
                 </table>
             </div>
             <div class="flex items-center space-x-3 text-xs text-slate-600 mt-3">
-                <span class="inline-flex items-center space-x-1"><span class="w-3 h-3 rounded risk-high inline-block"></span><span>High</span></span>
-                <span class="inline-flex items-center space-x-1"><span class="w-3 h-3 rounded risk-med inline-block"></span><span>Medium</span></span>
-                <span class="inline-flex items-center space-x-1"><span class="w-3 h-3 rounded risk-low inline-block"></span><span>Low</span></span>
+                <span class="inline-flex items-center space-x-1"><span class="w-3 h-3 rounded risk-high inline-block"></span><span data-label-id="risk-legend-high">High</span></span>
+                <span class="inline-flex items-center space-x-1"><span class="w-3 h-3 rounded risk-med inline-block"></span><span data-label-id="risk-legend-medium">Medium</span></span>
+                <span class="inline-flex items-center space-x-1"><span class="w-3 h-3 rounded risk-low inline-block"></span><span data-label-id="risk-legend-low">Low</span></span>
             </div>
         {% else %}
             <div class="text-sm text-slate-500">No tasks available to build a risk matrix.</div>
@@ -168,6 +195,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const allTasks = {{ tasks|tojson }};
 
     const palette = ['#2563eb','#16a34a','#f59e0b','#ef4444','#8b5cf6','#0ea5e9'];
+
+    // Simple inline label editor (non-persistent) when enabled
+    document.querySelectorAll('[data-label-target]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const targetId = btn.getAttribute('data-label-target');
+            const span = document.getElementById(targetId);
+            if (!span) return;
+            const current = span.textContent.trim();
+            const next = prompt('Edit label text:', current);
+            if (next !== null && next.trim() !== '') {
+                span.textContent = next.trim();
+            }
+        });
+    });
 
     function makePie(ctxId, labels, data, colors) {
         const ctx = document.getElementById(ctxId);
@@ -193,32 +235,6 @@ document.addEventListener('DOMContentLoaded', () => {
     makePie('severityChart', severityLabels, severityData, {{ severity_palette|tojson }});
     makePie('impactChart', impactLabels, impactData, {{ impact_palette|tojson }});
     makePie('completionChart', completionLabels, completionData, {{ completion_palette|tojson }});
-
-    // User metric filters -> scroll to table and filter rows
-    const metricButtons = document.querySelectorAll('[data-user-filter]');
-    const userRows = document.querySelectorAll('.user-status-row');
-    const statusSection = document.getElementById('user-status');
-    function applyUserFilter(mode) {
-        userRows.forEach(row => {
-            const pending = parseInt(row.dataset.pending || '0', 10);
-            const overdue = parseInt(row.dataset.overdue || '0', 10);
-            let show = true;
-            if (mode === 'complete') {
-                show = pending === 0 && overdue === 0;
-            } else if (mode === 'pending') {
-                show = pending > 0;
-            } else if (mode === 'overdue') {
-                show = overdue > 0;
-            }
-            row.style.display = show ? '' : 'none';
-        });
-        if (statusSection) {
-            statusSection.scrollIntoView({ behavior: 'smooth' });
-        }
-    }
-    metricButtons.forEach(btn => {
-        btn.addEventListener('click', () => applyUserFilter(btn.dataset.userFilter || 'all'));
-    });
 
     // Task metric clicks -> scroll/highlight chart or table
     const taskMetricButtons = document.querySelectorAll('[data-metric-target]');
@@ -255,10 +271,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const header = document.createElement('div');
             header.className = 'grid grid-cols-[280px,90px,160px,100px] gap-2 items-center bg-slate-100 px-3 py-2 rounded font-semibold text-slate-700 text-center';
             header.innerHTML = `
-                <div class="text-left">Task</div>
-                <div class="text-center">% Complete</div>
-                <div class="text-center">No. Users Assigned</div>
-                <div class="text-center">Status</div>
+                <div class="text-left"><span data-label-id="modal-col-task">Task</span></div>
+                <div class="text-center"><span data-label-id="modal-col-percent">% Complete</span></div>
+                <div class="text-center"><span data-label-id="modal-col-users">No. Users Assigned</span></div>
+                <div class="text-center"><span data-label-id="modal-col-status">Status</span></div>
             `;
             wrapper.appendChild(header);
             if (list.length) {
@@ -271,8 +287,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     const done = t.assign_completed || 0;
                     const pct = t.completion_pct || 0;
                     const flag = t.overdue
-                        ? '<span class="text-red-700 font-semibold">Overdue</span>'
-                        : (t.fully_completed ? '<span class="text-green-700 font-semibold">Completed</span>' : '<span class="text-slate-600">Pending</span>');
+                        ? '<span class="text-red-700 font-semibold" data-label-id="modal-flag-overdue">Overdue</span>'
+                        : (t.fully_completed ? '<span class="text-green-700 font-semibold" data-label-id="modal-flag-completed">Completed</span>' : '<span class="text-slate-600" data-label-id="modal-flag-pending">Pending</span>');
                     row.innerHTML = `
                         <div class="text-left text-base font-semibold text-slate-900">${t.title || 'Untitled'}</div>
                         <div class="text-center text-xs text-slate-700">${pct}%</div>
@@ -287,7 +303,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const totalDoneSum = list.reduce((s, t) => s + (t.assign_completed || 0), 0);
                 totalsRow.className = 'grid grid-cols-[280px,90px,160px,100px] gap-2 items-center px-3 py-2 rounded bg-slate-200 text-sm font-semibold text-slate-800 text-center';
                 totalsRow.innerHTML = `
-                    <div class="text-left">Average / Totals</div>
+                    <div class="text-left"><span data-label-id="modal-row-average">Average / Totals</span></div>
                     <div>${avgPct}%</div>
                     <div>${totalDoneSum}/${totalAssignSum}</div>
                     <div></div>
@@ -296,7 +312,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 const p = document.createElement('p');
                 p.className = 'text-sm text-slate-600 px-3 py-2';
-                p.textContent = 'No tasks found for this category.';
+                p.innerHTML = '<span data-label-id="modal-empty">No tasks found for this category.</span>';
                 wrapper.appendChild(p);
             }
             modalContent.appendChild(wrapper);
@@ -314,18 +330,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
-    const overdueButton = document.querySelector('[data-user-filter="overdue"]');
-    if (overdueButton) {
-        overdueButton.addEventListener('dblclick', () => showTasks('overdue'));
-    }
-    const pendingButton = document.querySelector('[data-user-filter="pending"]');
-    if (pendingButton) {
-        pendingButton.addEventListener('dblclick', () => showTasks('pending'));
-    }
-    const totalButton = document.querySelector('[data-user-filter="all"]');
-    if (totalButton) {
-        totalButton.addEventListener('dblclick', () => showTasks('all'));
-    }
     if (modalClose) {
         modalClose.addEventListener('click', () => modal.classList.add('hidden'));
     }
@@ -342,7 +346,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <div id="task-modal" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
     <div class="bg-white rounded shadow-lg max-w-3xl w-11/12 md:w-3/4">
         <div class="flex items-center justify-between px-4 py-2 border-b">
-            <h4 class="font-semibold text-slate-800">Task Summary</h4>
+            <h4 class="font-semibold text-slate-800"><span data-label-id="modal-task-summary-title">Task Summary</span></h4>
             <button id="task-modal-close" class="text-slate-500 hover:text-slate-700">&times;</button>
         </div>
         <div id="task-modal-content" class="p-4 max-h-[60vh] overflow-y-auto space-y-2 text-sm text-slate-700"></div>

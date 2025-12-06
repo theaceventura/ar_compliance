@@ -4,7 +4,7 @@
 <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-4 space-y-3 md:space-y-0">
     <div class="flex flex-col">
         <h2 class="text-xl font-semibold">
-            User Dashboard
+            <span data-label-id="title-user-dashboard">User Dashboard</span>
             {% if companies %}
                 {% if selected_company_id %}
                     - {{ (companies | selectattr('id','equalto', selected_company_id) | list | first).name if (companies | selectattr('id','equalto', selected_company_id) | list) else '' }}
@@ -34,26 +34,36 @@
 </div>
 
 <div class="mt-6 bg-white shadow rounded relative" data-widget-id="user-dashboard-metrics">
-    <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">User Metrics</div>
+    <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700"><span data-label-id="heading-user-metrics">User Metrics</span></div>
     <div class="p-4 grid grid-cols-1 md:grid-cols-5 gap-4">
-        <div class="bg-slate-50 border border-slate-100 p-4 rounded text-center">
-            <div class="text-sm text-slate-500">Total Users</div>
+        <div class="bg-slate-50 border border-slate-100 p-4 rounded text-center cursor-pointer" role="button" data-user-filter="all">
+            <div class="text-sm text-slate-500 flex items-center justify-center gap-1">
+                <span id="label-user-total" data-label-id="label-user-total">Total Users</span>
+            </div>
             <div class="text-2xl font-semibold">{{ user_metrics.total_users }}</div>
         </div>
-        <div class="bg-slate-50 border border-slate-100 p-4 rounded text-center">
-            <div class="text-sm text-slate-500">Complete</div>
+        <div class="bg-slate-50 border border-slate-100 p-4 rounded text-center cursor-pointer" role="button" data-user-filter="complete">
+            <div class="text-sm text-slate-500 flex items-center justify-center gap-1">
+                <span id="label-user-complete" data-label-id="label-user-complete">Complete</span>
+            </div>
             <div class="text-2xl font-semibold text-green-700">{{ user_metrics.completed_users }} / {{ user_metrics.total_users }}</div>
         </div>
-        <div class="bg-slate-50 border border-slate-100 p-4 rounded text-center">
-            <div class="text-sm text-slate-500">Pending</div>
+        <div class="bg-slate-50 border border-slate-100 p-4 rounded text-center cursor-pointer" role="button" data-user-filter="pending">
+            <div class="text-sm text-slate-500 flex items-center justify-center gap-1">
+                <span id="label-user-pending" data-label-id="label-user-pending">Pending</span>
+            </div>
             <div class="text-2xl font-semibold text-amber-700">{{ user_metrics.pending_users }} / {{ user_metrics.total_users }}</div>
         </div>
-        <div class="bg-slate-50 border border-slate-100 p-4 rounded text-center">
-            <div class="text-sm text-slate-500">Overdue</div>
+        <div class="bg-slate-50 border border-slate-100 p-4 rounded text-center cursor-pointer" role="button" data-user-filter="overdue">
+            <div class="text-sm text-slate-500 flex items-center justify-center gap-1">
+                <span id="label-user-overdue" data-label-id="label-user-overdue">Overdue</span>
+            </div>
             <div class="text-2xl font-semibold text-red-700">{{ user_metrics.overdue_users }} / {{ user_metrics.total_users }}</div>
         </div>
         <div class="bg-slate-50 border border-slate-100 p-4 rounded text-center">
-            <div class="text-sm text-slate-500">Compliance %</div>
+            <div class="text-sm text-slate-500 flex items-center justify-center gap-1">
+                <span id="label-user-compliance" data-label-id="label-user-compliance">Compliance %</span>
+            </div>
             <div class="text-2xl font-semibold text-emerald-700">{{ user_metrics.compliance_pct }}%</div>
         </div>
     </div>
@@ -66,35 +76,23 @@
 
 <div id="user-status" class="mt-8 bg-white shadow rounded relative" data-widget-id="user-dashboard-user-status">
     <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700 flex items-center justify-between">
-        <h3 class="text-lg">User Completion Status</h3>
+        <h3 class="text-lg"><span data-label-id="heading-user-status">User Completion Status</span></h3>
         <div class="space-x-3 text-sm">
             <a href="/admin/report/summary.csv" class="text-blue-600 hover:underline">Download summary CSV</a>
             <a href="/admin/notify/overdue" class="text-blue-600 hover:underline">Send overdue notifications</a>
             <a href="/admin/users" class="text-blue-600 hover:underline">User Admin</a>
         </div>
     </div>
-    <div class="p-4 space-y-2 text-sm">
-        <div class="grid grid-cols-[1fr,120px,160px,120px,120px] gap-2 items-center bg-slate-100 px-3 py-2 rounded font-semibold text-slate-700">
-            <div class="text-left">Username</div>
-            <div class="text-center">Role</div>
-            <div class="text-center">Completed / Total</div>
-            <div class="text-center">Compliance</div>
-            <div class="text-center">Report</div>
+    <div class="p-3 space-y-2 text-sm">
+        <div class="tbl-header text-sm grid grid-cols-[180px,160px,90px,120px,100px,90px] gap-2 items-center">
+            <div class="text-left"><span data-label-id="user-table-name">Name</span></div>
+            <div class="text-left"><span data-label-id="user-table-username">Username</span></div>
+            <div class="text-center"><span data-label-id="user-table-role">Role</span></div>
+            <div class="text-center"><span data-label-id="user-table-completed">Completed / Total</span></div>
+            <div class="text-center"><span data-label-id="user-table-status">Status</span></div>
+            <div class="text-center"><span data-label-id="user-table-report">Report</span></div>
         </div>
-        <div class="flex items-center space-x-4 text-xs text-slate-600 px-1">
-            <span class="inline-flex items-center space-x-1">
-                <span class="w-3 h-3 rounded border border-amber-200 bg-amber-50 inline-block"></span>
-                <span>Pending tasks remain</span>
-            </span>
-            <span class="inline-flex items-center space-x-1">
-                <span class="w-3 h-3 rounded border border-slate-200 bg-slate-50 inline-block"></span>
-                <span>All tasks completed</span>
-            </span>
-            <span class="inline-flex items-center space-x-1">
-                <span class="w-3 h-3 rounded bg-red-600 inline-block"></span>
-                <span>Overdue count badge</span>
-            </span>
-        </div>
+        {% if compliance %}
         {% for row in compliance %}
             {% set total = row.total_tasks or 0 %}
             {% set completed = row.completed_tasks or 0 %}
@@ -102,15 +100,32 @@
             {% set pct = (completed / total * 100) if total else 0 %}
             {% set overdue = row.overdue_tasks or 0 %}
             {% set base_bg = 'bg-slate-50' if loop.index0 % 2 == 0 else 'bg-slate-100/60' %}
-            <div class="user-status-row grid grid-cols-[1fr,120px,160px,120px,120px] gap-2 items-center px-3 py-2 rounded {% if pending > 0 %}bg-amber-50 border border-amber-200{% else %}{{ base_bg }}{% endif %}" data-pending="{{ pending }}" data-overdue="{{ overdue }}">
+            {% set row_class = base_bg %}
+            {% if overdue > 0 %}
+                {% set row_class = 'bg-red-50 border border-red-200' %}
+            {% elif pending > 0 %}
+                {% set row_class = 'bg-amber-50 border border-amber-200' %}
+            {% endif %}
+            <div class="user-status-row tbl-row text-sm grid grid-cols-[180px,160px,90px,120px,100px,90px] gap-2 items-center rounded {{ row_class }}" data-pending="{{ pending }}" data-overdue="{{ overdue }}">
+                <div class="text-left truncate">{{ row.first_name or '' }} {{ row.last_name or '' }}</div>
                 <div class="text-left truncate">{{ row.username }}</div>
                 <div class="text-center">{{ row.role }}</div>
                 <div class="text-center">{{ completed }} / {{ total }}</div>
-                <div class="text-center">{{ pct|round(1) }}%</div>
                 <div class="text-center">
                     {% if overdue > 0 %}
-                        <div class="text-xs text-red-700 font-semibold mb-1">Overdue: {{ overdue }}</div>
+                        <span class="text-red-700 font-semibold">Overdue</span>
+                        <span class="text-xs text-slate-600">({{ overdue }})</span>
+                    {% elif pending > 0 %}
+                        <span class="text-amber-700 font-semibold">Pending</span>
+                        <span class="text-xs text-slate-600">
+                            (<span class="text-amber-700">{{ pending }}</span>{% if overdue > 0 %}/<span class="text-red-700">{{ overdue }}</span>{% endif %})
+                        </span>
+                    {% else %}
+                        <span class="text-green-700 font-semibold">Complete</span>
+                        <span class="text-xs text-slate-600">({{ completed }})</span>
                     {% endif %}
+                </div>
+                <div class="text-center">
                     {% if is_company_admin %}
                         <a href="/company-admin/report/{{ row.id }}" class="text-blue-600 hover:underline">View</a>
                     {% else %}
@@ -119,6 +134,64 @@
                 </div>
             </div>
         {% endfor %}
+        {% else %}
+            <div class="tbl-empty text-sm">No users to display.</div>
+        {% endif %}
+        <div class="flex items-center space-x-4 text-xs text-slate-600 px-1 pt-2">
+            <span class="inline-flex items-center space-x-1">
+                <span class="w-3 h-3 rounded border border-amber-200 bg-amber-50 inline-block"></span>
+                <span data-label-id="legend-pending">Pending tasks remain</span>
+            </span>
+            <span class="inline-flex items-center space-x-1">
+                <span class="w-3 h-3 rounded border border-slate-200 bg-slate-50 inline-block"></span>
+                <span data-label-id="legend-complete">All tasks completed</span>
+            </span>
+            <span class="inline-flex items-center space-x-1">
+                <span class="w-3 h-3 rounded bg-red-600 inline-block"></span>
+                <span data-label-id="legend-overdue">Overdue count badge</span>
+            </span>
+        </div>
     </div>
 </div>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // User metric filters -> filter table rows
+    const metricButtons = document.querySelectorAll('[data-user-filter]');
+    const userRows = document.querySelectorAll('.user-status-row');
+    const statusSection = document.getElementById('user-status');
+    function applyUserFilter(mode) {
+        userRows.forEach(row => {
+            const pending = parseInt(row.dataset.pending || '0', 10);
+            const overdue = parseInt(row.dataset.overdue || '0', 10);
+            let show = true;
+            if (mode === 'complete') {
+                show = pending === 0 && overdue === 0;
+            } else if (mode === 'pending') {
+                show = pending > 0;
+            } else if (mode === 'overdue') {
+                show = overdue > 0;
+            }
+            row.style.display = show ? '' : 'none';
+        });
+        statusSection?.scrollIntoView({ behavior: 'smooth' });
+    }
+    metricButtons.forEach(btn => {
+        btn.addEventListener('click', () => applyUserFilter(btn.dataset.userFilter || 'all'));
+    });
+
+    document.querySelectorAll('[data-label-target]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const targetId = btn.getAttribute('data-label-target');
+            const span = document.getElementById(targetId);
+            if (!span) return;
+            const current = span.textContent.trim();
+            const next = prompt('Edit label text:', current);
+            if (next !== null && next.trim() !== '') {
+                span.textContent = next.trim();
+            }
+        });
+    });
+});
+</script>
 {% endblock %}

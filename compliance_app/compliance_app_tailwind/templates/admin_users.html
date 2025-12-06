@@ -6,13 +6,28 @@
 <div class="bg-white shadow rounded mb-6 relative overflow-visible" data-widget-id="admin-users-list">
     <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700 flex items-center justify-between">
         <h3 class="font-semibold">Users</h3>
-        <label class="inline-flex items-center space-x-2 text-sm text-slate-700">
-            <input type="checkbox" id="filterAdmins" data-role-target="{{ 'company_admin' if is_company_admin else 'admin' }}" class="h-4 w-4">
-            <span>{% if is_company_admin %}Show company admins only{% else %}Show admin users only{% endif %}</span>
-        </label>
+        <div class="flex items-center space-x-4">
+            <label class="inline-flex items-center space-x-2 text-sm text-slate-700">
+                <input type="checkbox" id="filterAdmins" data-role-target="{{ 'company_admin' if is_company_admin else 'admin' }}" class="h-4 w-4">
+                <span>{% if is_company_admin %}Show company admins only{% else %}Show admin users only{% endif %}</span>
+            </label>
+            {% if not is_company_admin %}
+            <form method="GET" class="flex items-center space-x-2 text-sm">
+                <label for="userCompanyFilter" class="text-slate-700">Company:</label>
+                <select id="userCompanyFilter" name="company_id" class="border rounded px-2 py-1">
+                    <option value="" {% if not selected_company_id %}selected{% endif %}>All</option>
+                    {% for c in companies %}
+                        <option value="{{ c.id }}" {% if selected_company_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+                    {% endfor %}
+                </select>
+                {% if selected_user %}<input type="hidden" name="user_id" value="{{ selected_user.id }}">{% endif %}
+                <button class="bg-blue-600 text-white px-3 py-1 rounded">Filter</button>
+            </form>
+            {% endif %}
+        </div>
     </div>
     <div class="p-4 space-y-2 text-sm">
-        <div class="grid grid-cols-[1.3fr,1.1fr,1fr,1.4fr,0.8fr,0.7fr] gap-2 items-center bg-slate-100 px-3 py-2 rounded font-semibold text-slate-700">
+        <div class="tbl-header text-sm grid grid-cols-[1.3fr,1.1fr,1fr,1.4fr,0.8fr,0.7fr] gap-2 items-center">
             <div class="text-left">Name</div>
             <div class="text-left">Username</div>
             <div class="text-left">Company</div>
@@ -20,40 +35,44 @@
             <div class="text-center">Role</div>
             <div class="text-center">Report</div>
         </div>
-        {% for u in users %}
-            <div class="user-row grid grid-cols-[1.3fr,1.1fr,1fr,1.4fr,0.8fr,0.7fr] gap-2 items-center px-3 py-2 rounded {% if loop.index0 % 2 == 0 %}bg-slate-50{% else %}bg-slate-100/60{% endif %}" data-role="{{ u.role }}">
-                <div class="text-left text-sm text-slate-700 truncate">
-                    {{ u.first_name }} {{ u.last_name }}
-                </div>
-                <div class="text-left text-sm truncate">
-                    <a href="/admin/users?user_id={{ u.id }}" class="text-blue-600 hover:underline">{{ u.username or '(no username)' }}</a>
-                </div>
-                <div class="text-left text-xs text-slate-600 truncate">
-                    {% if company_lookup %}
-                        {{ company_lookup.get(u.company_id) or ('Company #' ~ u.company_id if u.company_id else 'Unassigned') }}
-                    {% else %}
-                        {{ 'Company #' ~ u.company_id if u.company_id else 'Unassigned' }}
-                    {% endif %}
-                </div>
-                <div class="text-left text-xs text-slate-600">
-                    {% if u.email %}<div>{{ u.email }}</div>{% endif %}
-                    {% if u.mobile %}<div>{{ u.mobile }}</div>{% endif %}
-                    {% if u.send_notifications %}<div class="text-green-700">Notifications</div>{% endif %}
-                </div>
-                <div class="text-center text-sm">{{ u.role }}</div>
-                <div class="text-center text-sm">
-                    {% if u.role == "user" %}
-                        {% if is_company_admin %}
-                            <a href="/company-admin/report/{{ u.id }}" class="text-blue-600 hover:underline text-sm">View Tasks</a>
+        {% if users %}
+            {% for u in users %}
+                <div class="user-row grid grid-cols-[1.3fr,1.1fr,1fr,1.4fr,0.8fr,0.7fr] gap-2 items-center tbl-row text-sm {% if loop.index0 % 2 == 0 %}tbl-row-bg{% else %}tbl-row-alt{% endif %}" data-role="{{ u.role }}">
+                    <div class="text-left text-sm text-slate-700 truncate">
+                        {{ u.first_name }} {{ u.last_name }}
+                    </div>
+                    <div class="text-left text-sm truncate">
+                        <a href="/admin/users?user_id={{ u.id }}" class="text-blue-600 hover:underline">{{ u.username or '(no username)' }}</a>
+                    </div>
+                    <div class="text-left text-xs text-slate-600 truncate">
+                        {% if company_lookup %}
+                            {{ company_lookup.get(u.company_id) or ('Company #' ~ u.company_id if u.company_id else 'Unassigned') }}
                         {% else %}
-                            <a href="/admin/report/{{ u.id }}" class="text-blue-600 hover:underline text-sm">View Tasks</a>
+                            {{ 'Company #' ~ u.company_id if u.company_id else 'Unassigned' }}
                         {% endif %}
-                    {% else %}
-                        <span class="text-slate-400">—</span>
-                    {% endif %}
+                    </div>
+                    <div class="text-left text-xs text-slate-600">
+                        {% if u.email %}<div>{{ u.email }}</div>{% endif %}
+                        {% if u.mobile %}<div>{{ u.mobile }}</div>{% endif %}
+                        {% if u.send_notifications %}<div class="text-green-700">Notifications</div>{% endif %}
+                    </div>
+                    <div class="text-center text-sm">{{ u.role }}</div>
+                    <div class="text-center text-sm">
+                        {% if u.role == "user" %}
+                            {% if is_company_admin %}
+                                <a href="/company-admin/report/{{ u.id }}" class="text-blue-600 hover:underline text-sm">View Tasks</a>
+                            {% else %}
+                                <a href="/admin/report/{{ u.id }}" class="text-blue-600 hover:underline text-sm">View Tasks</a>
+                            {% endif %}
+                        {% else %}
+                            <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </div>
                 </div>
-            </div>
-        {% endfor %}
+            {% endfor %}
+        {% else %}
+            <div class="tbl-empty text-sm">No users found for this filter.</div>
+        {% endif %}
     </div>
 </div>
 
@@ -77,15 +96,15 @@
         </div>
         <div class="grid grid-cols-[160px,1fr] items-center px-3 py-2 rounded bg-slate-50">
             <div class="text-left font-medium">First name</div>
-            <input name="first_name" value="{{ selected_user.first_name if selected_user }}" class="w-full border p-2 rounded text-sm">
+            <input name="first_name" value="{{ selected_user.first_name if selected_user }}" class="w-full border p-2 rounded text-sm" required>
         </div>
         <div class="grid grid-cols-[160px,1fr] items-center px-3 py-2 rounded bg-slate-100/60">
             <div class="text-left font-medium">Last name</div>
-            <input name="last_name" value="{{ selected_user.last_name if selected_user }}" class="w-full border p-2 rounded text-sm">
+            <input name="last_name" value="{{ selected_user.last_name if selected_user }}" class="w-full border p-2 rounded text-sm" required>
         </div>
         <div class="grid grid-cols-[160px,1fr] items-center px-3 py-2 rounded bg-slate-50">
             <div class="text-left font-medium">Email</div>
-            <input name="email" type="email" value="{{ selected_user.email if selected_user }}" class="w-full border p-2 rounded text-sm">
+            <input name="email" type="email" value="{{ selected_user.email if selected_user }}" class="w-full border p-2 rounded text-sm" required>
         </div>
         <div class="grid grid-cols-[160px,1fr] items-center px-3 py-2 rounded bg-slate-100/60">
             <div class="text-left font-medium">Mobile</div>
@@ -93,7 +112,8 @@
         </div>
         <div class="grid grid-cols-[160px,1fr] items-center px-3 py-2 rounded bg-slate-50">
             <div class="text-left font-medium">Role</div>
-            <select name="role" class="w-full border p-2 rounded text-sm">
+            <select name="role" class="w-full border p-2 rounded text-sm" required>
+                <option value="" disabled {% if not selected_user or not selected_user.role %}selected{% endif %}>-- Select role --</option>
                 <option value="user" {% if selected_user and selected_user.role == 'user' %}selected{% endif %}>User</option>
                 {% if allow_admin_role %}
                 <option value="admin" {% if selected_user and selected_user.role == 'admin' %}selected{% endif %}>Admin</option>
@@ -124,7 +144,8 @@
                     <input class="w-full border p-2 rounded text-sm bg-slate-100" value="{{ only_company.name if only_company else 'Unassigned' }}" disabled>
                 </div>
             {% else %}
-                <select name="company_id" class="w-full border p-2 rounded text-sm">
+                <select name="company_id" class="w-full border p-2 rounded text-sm" required>
+                    <option value="" {% if not selected_user or not selected_user.company_id %}selected{% endif %}>-- Select company --</option>
                     {% for c in companies %}
                         <option value="{{ c.id }}" {% if selected_user and selected_user.company_id == c.id %}selected{% endif %}>{{ c.name }}</option>
                     {% endfor %}

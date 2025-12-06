@@ -6,26 +6,37 @@
 <div class="bg-white shadow rounded mb-6 relative" data-widget-id="admin-companies-list">
     <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700 flex items-center justify-between">
         <h3 class="font-semibold">Companies</h3>
+        <form method="GET" class="flex items-center space-x-2 text-xs text-slate-700">
+            <label class="inline-flex items-center space-x-1">
+                <input type="checkbox" name="show_inactive" value="1" {% if request.args.get('show_inactive') %}checked{% endif %} class="h-4 w-4">
+                <span>Show inactive</span>
+            </label>
+            <button class="bg-blue-600 text-white px-3 py-1 rounded">Apply</button>
+        </form>
     </div>
     <div class="p-4 space-y-2 text-sm">
-        <div class="grid grid-cols-[70px,1fr,120px,120px] gap-2 items-center bg-slate-100 px-3 py-2 rounded font-semibold text-slate-700">
+        <div class="tbl-header text-sm grid grid-cols-[70px,1fr,120px,120px] gap-2 items-center">
             <div class="text-center">ID</div>
             <div class="text-left">Name</div>
             <div class="text-center">Active</div>
             <div class="text-center">Action</div>
         </div>
-        {% for c in companies %}
-            <div class="grid grid-cols-[70px,1fr,120px,120px] gap-2 items-center px-3 py-2 rounded {% if loop.index0 % 2 == 0 %}bg-slate-50{% else %}bg-slate-100/60{% endif %}">
-                <div class="text-center text-xs text-slate-600">{{ c.id }}</div>
-                <div class="text-left truncate">{{ c.name }}</div>
-                <div class="text-center text-xs">
-                    {% if c.is_active %}<span class="text-green-700 font-semibold">Active</span>{% else %}<span class="text-slate-500">Inactive</span>{% endif %}
+        {% if companies %}
+            {% for c in companies %}
+                <div class="grid grid-cols-[70px,1fr,120px,120px] gap-2 items-center tbl-row {% if loop.index0 % 2 == 0 %}tbl-row-bg{% else %}tbl-row-alt{% endif %}">
+                    <div class="text-center text-xs text-slate-600">{{ c.id }}</div>
+                    <div class="text-left truncate">{{ c.name }}</div>
+                    <div class="text-center text-xs">
+                        {% if c.is_active %}<span class="text-green-700 font-semibold">Active</span>{% else %}<span class="text-slate-500">Inactive</span>{% endif %}
+                    </div>
+                    <div class="text-center">
+                        <a href="/admin/companies?company_id={{ c.id }}" class="text-blue-600 hover:underline text-sm">Edit</a>
+                    </div>
                 </div>
-                <div class="text-center">
-                    <a href="/admin/companies?company_id={{ c.id }}" class="text-blue-600 hover:underline text-sm">Edit</a>
-                </div>
-            </div>
-        {% endfor %}
+            {% endfor %}
+        {% else %}
+            <div class="tbl-empty text-sm">No companies to show.</div>
+        {% endif %}
     </div>
 </div>
 

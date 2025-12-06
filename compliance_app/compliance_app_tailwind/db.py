@@ -142,6 +142,7 @@ def create_tables_if_needed():
             show_page_name INTEGER DEFAULT 0,
             show_module_tree INTEGER DEFAULT 0,
             show_cut_icon INTEGER DEFAULT 0,
+            show_label_edit INTEGER DEFAULT 0,
             severity_palette TEXT,
             impact_palette TEXT,
             completion_palette TEXT
@@ -151,6 +152,8 @@ def create_tables_if_needed():
         cur.execute("ALTER TABLE app_settings ADD COLUMN show_module_tree INTEGER DEFAULT 0")
     if not _column_exists(cur, "app_settings", "show_cut_icon"):
         cur.execute("ALTER TABLE app_settings ADD COLUMN show_cut_icon INTEGER DEFAULT 0")
+    if not _column_exists(cur, "app_settings", "show_label_edit"):
+        cur.execute("ALTER TABLE app_settings ADD COLUMN show_label_edit INTEGER DEFAULT 0")
     if not _column_exists(cur, "app_settings", "severity_palette"):
         cur.execute("ALTER TABLE app_settings ADD COLUMN severity_palette TEXT")
     if not _column_exists(cur, "app_settings", "impact_palette"):
@@ -169,8 +172,8 @@ def create_tables_if_needed():
     cur.execute("SELECT 1 FROM app_settings WHERE id=1")
     if cur.fetchone() is None:
         cur.execute("""
-            INSERT INTO app_settings (id, version, show_version, show_page_name, show_module_tree, show_cut_icon, severity_palette, impact_palette, completion_palette)
-            VALUES (1, '', 0, 0, 0, 0, '', '', '')
+            INSERT INTO app_settings (id, version, show_version, show_page_name, show_module_tree, show_cut_icon, show_label_edit, severity_palette, impact_palette, completion_palette)
+            VALUES (1, '', 0, 0, 0, 0, 0, '', '', '')
         """)
     # Seed default task field descriptions
     defaults = {
@@ -501,15 +504,15 @@ def admin_get_app_settings():
 
 
 # Admin: update app settings
-def admin_update_app_settings(version, show_version, show_page_name, show_module_tree, show_cut_icon):
+def admin_update_app_settings(version, show_version, show_page_name, show_module_tree, show_cut_icon, show_label_edit):
     """Persist the main app setting flags and version string."""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("""
         UPDATE app_settings
-        SET version=?, show_version=?, show_page_name=?, show_module_tree=?, show_cut_icon=?
+        SET version=?, show_version=?, show_page_name=?, show_module_tree=?, show_cut_icon=?, show_label_edit=?
         WHERE id=1
-    """, (version, 1 if show_version else 0, 1 if show_page_name else 0, 1 if show_module_tree else 0, 1 if show_cut_icon else 0))
+    """, (version, 1 if show_version else 0, 1 if show_page_name else 0, 1 if show_module_tree else 0, 1 if show_cut_icon else 0, 1 if show_label_edit else 0))
     conn.commit()
     conn.close()
 
@@ -609,8 +612,9 @@ def admin_create_user(username, password, role="user", first_name=None, last_nam
         )
         user_id = cur.lastrowid
 
-        # Assign existing tasks to the new user as pending
-        cur.execute("SELECT id FROM tasks WHERE company_id=?", (company_id,))
+        # Assign existing tasks to the new user as pending.
+        # Include both company-specific tasks and global tasks (company_id is NULL/0).
+        cur.execute("SELECT id FROM tasks WHERE company_id=? OR company_id IS NULL OR company_id=0", (company_id,))
         for t in cur.fetchall():
             cur.execute(
                 "INSERT INTO user_tasks (user_id, task_id, status) VALUES (?, ?, 'pending')",
@@ -669,9 +673,10 @@ def admin_user_compliance(company_id):
     """Return per-user compliance counts (completed, pending, overdue)."""
     conn = get_connection()
     cur = conn.cursor()
+    _assign_tasks_for_company(cur, company_id)
     if company_id is None:
         cur.execute("""
-            SELECT users.id, users.username, users.role,
+            SELECT users.id, users.username, users.role, users.first_name, users.last_name,
                    COUNT(user_tasks.id) as total_tasks,
                    SUM(CASE WHEN user_tasks.status='completed' THEN 1 ELSE 0 END) as completed_tasks,
                    SUM(CASE WHEN user_tasks.status!='completed' THEN 1 ELSE 0 END) as pending_tasks,
@@ -683,12 +688,12 @@ def admin_user_compliance(company_id):
             LEFT JOIN user_tasks ON users.id = user_tasks.user_id
             LEFT JOIN tasks ON tasks.id = user_tasks.task_id
             WHERE (tasks.company_id = users.company_id OR tasks.company_id IS NULL)
-            GROUP BY users.id, users.username, users.role
+            GROUP BY users.id, users.username, users.role, users.first_name, users.last_name
             ORDER BY users.username
         """)
     else:
         cur.execute("""
-            SELECT users.id, users.username, users.role,
+            SELECT users.id, users.username, users.role, users.first_name, users.last_name,
                    COUNT(user_tasks.id) as total_tasks,
                    SUM(CASE WHEN user_tasks.status='completed' THEN 1 ELSE 0 END) as completed_tasks,
                    SUM(CASE WHEN user_tasks.status!='completed' THEN 1 ELSE 0 END) as pending_tasks,
@@ -701,7 +706,7 @@ def admin_user_compliance(company_id):
             LEFT JOIN tasks ON tasks.id = user_tasks.task_id
             WHERE users.company_id=?
               AND (tasks.company_id = users.company_id OR tasks.company_id IS NULL)
-            GROUP BY users.id, users.username, users.role
+            GROUP BY users.id, users.username, users.role, users.first_name, users.last_name
             ORDER BY users.username
         """, (company_id,))
     rows = cur.fetchall()
@@ -715,6 +720,7 @@ def admin_get_all_tasks(company_id=None):
     conn = get_connection()
     cur = conn.cursor()
     if company_id:
+        _assign_tasks_for_company(cur, company_id)
         cur.execute("""
             SELECT tasks.*,
                    users.username AS owner_username,
@@ -735,15 +741,11 @@ def admin_get_all_tasks(company_id=None):
             FROM tasks
             LEFT JOIN users ON tasks.owner_user_id = users.id
             LEFT JOIN companies ON companies.id = tasks.company_id
-            WHERE (tasks.company_id=? OR tasks.company_id IS NULL)
-              AND EXISTS (
-                  SELECT 1 FROM user_tasks ut2
-                  JOIN users uu ON uu.id = ut2.user_id
-                  WHERE ut2.task_id = tasks.id AND uu.company_id = ?
-              )
+            WHERE (tasks.company_id=? OR tasks.company_id IS NULL OR tasks.company_id=0)
             ORDER BY due_date
-        """, (company_id, company_id, company_id, company_id))
+        """, (company_id, company_id, company_id))
     else:
+        _assign_tasks_for_company(cur, None)
         cur.execute("""
             SELECT tasks.*,
                    users.username AS owner_username,
@@ -808,6 +810,100 @@ def admin_update_task(task_id, title, description, due_date, impact, severity, o
     conn.close()
 
 
+def admin_get_task_assignments(task_id):
+    """Return a set of user_ids currently assigned to the task."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT user_id FROM user_tasks WHERE task_id=?", (task_id,))
+    rows = cur.fetchall()
+    conn.close()
+    return {r["user_id"] for r in rows}
+
+
+def admin_get_task_assignment_status(task_id):
+    """Return a mapping of user_id -> status for assignments on a task."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT user_id, status FROM user_tasks WHERE task_id=?", (task_id,))
+    rows = cur.fetchall()
+    conn.close()
+    return {r["user_id"]: r["status"] for r in rows}
+
+def admin_ensure_assignments_for_company(company_id=None):
+    """Public helper to ensure tasks are assigned for a company (or all)."""
+    conn = get_connection()
+    cur = conn.cursor()
+    _assign_tasks_for_company(cur, company_id)
+    conn.commit()
+    conn.close()
+
+
+def ensure_user_assignments(user_id, company_id=None):
+    """Assign all applicable tasks (company-specific or global) to the given user if missing."""
+    conn = get_connection()
+    cur = conn.cursor()
+    # Pull tasks that match the user's company or are global
+    cur.execute("""
+        INSERT INTO user_tasks (user_id, task_id, status)
+        SELECT ?, t.id, 'pending'
+        FROM tasks t
+        LEFT JOIN user_tasks ut ON ut.user_id=? AND ut.task_id=t.id
+        WHERE ut.id IS NULL
+          AND (t.company_id IS NULL OR t.company_id=0 OR t.company_id=?)
+    """, (user_id, user_id, company_id))
+    conn.commit()
+    conn.close()
+
+
+def admin_update_task_assignments(task_id, company_id=None, user_ids=None, assign_all=False):
+    """Update task assignments while preserving existing statuses for kept users."""
+    conn = get_connection()
+    cur = conn.cursor()
+    user_ids = user_ids or []
+
+    # Determine recipients
+    if assign_all or not user_ids:
+        if company_id is None:
+            cur.execute("SELECT id FROM users WHERE role='user'")
+        else:
+            cur.execute("SELECT id FROM users WHERE role='user' AND company_id=?", (company_id,))
+        recipients = {u["id"] for u in cur.fetchall()}
+    else:
+        requested = {int(uid) for uid in user_ids}
+        if company_id is None:
+            recipients = requested
+        else:
+            placeholders = ",".join("?" for _ in requested) or "NULL"
+            cur.execute(f"SELECT id FROM users WHERE company_id=? AND id IN ({placeholders})", (company_id, *requested))
+            recipients = {r["id"] for r in cur.fetchall()}
+
+    # Fetch existing rows to preserve status
+    cur.execute("SELECT user_id, status, answer_text, completed_at FROM user_tasks WHERE task_id=?", (task_id,))
+    existing = {row["user_id"]: row for row in cur.fetchall()}
+    completed_users = {uid for uid, row in existing.items() if row["status"] == "completed"}
+
+    # Completed assignments must not be removed
+    recipients |= completed_users
+
+    # Delete rows for users no longer assigned
+    if existing:
+        cur.execute(
+            f"DELETE FROM user_tasks WHERE task_id=? AND user_id NOT IN ({','.join(['?']*len(recipients))})" if recipients else "DELETE FROM user_tasks WHERE task_id=?",
+            ((task_id, *recipients) if recipients else (task_id,))
+        )
+
+    # Insert rows for new recipients, keep existing rows as-is
+    for uid in recipients:
+        if uid in existing:
+            continue
+        cur.execute(
+            "INSERT INTO user_tasks (user_id, task_id, status) VALUES (?, ?, 'pending')",
+            (uid, task_id),
+        )
+    conn.commit()
+    conn.close()
+
+
 # Admin: counts grouped by a column (impact/severity)
 def admin_task_counts_by(column, company_id=None):
     """Count tasks grouped by impact or severity, optionally by company."""
@@ -852,7 +948,7 @@ def admin_create_task(title, description, due_date, impact, severity, owner_user
 
     task_id = cur.lastrowid
 
-    # Decide recipients: explicit selection, assign-all, or fallback to all users in company
+    # Decide recipients: explicit selection, assign-all, or fallback to all users in scope (company or all)
     if assign_all or not user_ids:
         if company_id is None:
             cur.execute("SELECT id FROM users WHERE role='user'")
@@ -877,6 +973,10 @@ def admin_create_task(title, description, due_date, impact, severity, owner_user
     # If no owner was set but we have recipients, set the first recipient as owner for display
     if owner_user_id is None and recipients:
         cur.execute("UPDATE tasks SET owner_user_id=? WHERE id=?", (recipients[0], task_id))
+
+    # If global task, make sure all companies' users get it
+    if company_id is None:
+        _assign_global_tasks_to_company_users(cur, None)
 
     conn.commit()
     conn.close()
@@ -915,12 +1015,57 @@ def admin_get_user_report(user_id):
     return user, rows
 
 
+def _assign_tasks_for_company(cur, company_id=None):
+    """Ensure tasks are assigned to users.
+
+    - Global tasks (company_id NULL/0) -> all users or users in the given company.
+    - Company tasks (company_id matches) -> users in that company.
+    """
+    if company_id is None:
+        # Global tasks to all users
+        cur.execute("""
+            INSERT INTO user_tasks (user_id, task_id, status)
+            SELECT u.id, t.id, 'pending'
+            FROM users u
+            JOIN tasks t ON (t.company_id IS NULL OR t.company_id=0)
+            LEFT JOIN user_tasks ut ON ut.user_id = u.id AND ut.task_id = t.id
+            WHERE ut.id IS NULL
+              AND u.role='user'
+        """)
+    else:
+        # Global tasks to users in this company
+        cur.execute("""
+            INSERT INTO user_tasks (user_id, task_id, status)
+            SELECT u.id, t.id, 'pending'
+            FROM users u
+            JOIN tasks t ON (t.company_id IS NULL OR t.company_id=0)
+            LEFT JOIN user_tasks ut ON ut.user_id = u.id AND ut.task_id = t.id
+            WHERE ut.id IS NULL
+              AND u.role='user'
+              AND u.company_id=?
+        """, (company_id,))
+        # Company-specific tasks to users in this company
+        cur.execute("""
+            INSERT INTO user_tasks (user_id, task_id, status)
+            SELECT u.id, t.id, 'pending'
+            FROM users u
+            JOIN tasks t ON t.company_id = ?
+            LEFT JOIN user_tasks ut ON ut.user_id = u.id AND ut.task_id = t.id
+            WHERE ut.id IS NULL
+              AND u.role='user'
+              AND u.company_id=?
+        """, (company_id, company_id))
+
+
 # Admin: companies helpers
-def admin_get_companies():
-    """List all companies."""
+def admin_get_companies(show_inactive=False):
+    """List companies (active by default; include inactive when requested)."""
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM companies ORDER BY name")
+    if show_inactive:
+        cur.execute("SELECT * FROM companies ORDER BY name")
+    else:
+        cur.execute("SELECT * FROM companies WHERE is_active=1 ORDER BY name")
     rows = cur.fetchall()
     conn.close()
     return rows
@@ -982,6 +1127,7 @@ def admin_task_completion_rollup(company_id=None):
     conn = get_connection()
     cur = conn.cursor()
     if company_id is None:
+        _assign_tasks_for_company(cur, None)
         cur.execute("""
             SELECT ut.task_id,
                    SUM(CASE WHEN ut.status='completed' THEN 1 ELSE 0 END) as completed,
@@ -993,6 +1139,7 @@ def admin_task_completion_rollup(company_id=None):
             GROUP BY ut.task_id
         """)
     else:
+        _assign_tasks_for_company(cur, company_id)
         cur.execute("""
             SELECT ut.task_id,
                    SUM(CASE WHEN ut.status='completed' THEN 1 ELSE 0 END) as completed,
