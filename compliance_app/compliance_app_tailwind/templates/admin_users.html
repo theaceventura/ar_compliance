@@ -44,9 +44,9 @@
                 <div class="text-center text-sm">
                     {% if u.role == "user" %}
                         {% if is_company_admin %}
-                            <a href="/company-admin/report/{{ u.id }}" class="text-blue-600 hover:underline text-sm">View</a>
+                            <a href="/company-admin/report/{{ u.id }}" class="text-blue-600 hover:underline text-sm">View Tasks</a>
                         {% else %}
-                            <a href="/admin/report/{{ u.id }}" class="text-blue-600 hover:underline text-sm">View</a>
+                            <a href="/admin/report/{{ u.id }}" class="text-blue-600 hover:underline text-sm">View Tasks</a>
                         {% endif %}
                     {% else %}
                         <span class="text-slate-400">—</span>

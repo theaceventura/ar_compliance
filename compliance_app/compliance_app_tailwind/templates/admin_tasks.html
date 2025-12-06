@@ -38,7 +38,7 @@
             <div class="space-y-2">
                 {% for t in tasks %}
                     {% set base_bg = 'bg-slate-50' if loop.index0 % 2 == 0 else 'bg-slate-100/60' %}
-                    <div class="grid grid-cols-[80px,3.5fr,1.8fr,1.2fr,1.2fr,1.6fr,1.4fr,1.1fr] gap-2 items-center text-sm px-3 py-2 rounded {% if t.overdue %}bg-amber-50 border border-amber-200{% else %}{{ base_bg }}{% endif %}">
+                    <div class="grid grid-cols-[80px,3.5fr,1.8fr,1.2fr,1.2fr,1.6fr,1.4fr,1.1fr] gap-2 items-center text-sm px-3 py-2 rounded {% if t.overdue %}bg-red-50 border border-red-200{% else %}{{ base_bg }}{% endif %}">
                         <div class="text-xs text-slate-500 whitespace-nowrap text-center">#{{ t.id }}</div>
                         <div class="truncate text-left">
                             <a href="/admin/tasks/{{ t.id }}/edit" class="text-blue-600 hover:underline truncate inline-block">{{ t.title }}</a>

@@ -127,8 +127,7 @@ def login():
     # sqlite3.Row does not support .get, so pull with a keys check
     session["company_id"] = user_row["company_id"] if "company_id" in user_row.keys() else 1
 
-    if user_row["role"] == "admin":
-        return redirect(url_for("admin_dashboard"))
+    # Send all roles to the main dashboard (admin view is included there)
     return redirect(url_for("dashboard"))
 
 
@@ -146,21 +145,27 @@ def dashboard():
     """Show dashboards tailored to admins, company admins, or individual users."""
     user = current_user()
     if user["role"] == "admin":
-        company_arg = request.args.get("company_id", "").strip()
-        if company_arg == "all" or company_arg == "":
-            selected_company_id = None  # show all companies by default for global admin
-        else:
-            try:
-                selected_company_id = int(company_arg)
-            except ValueError:
+        selected_company_id = None
+        company_arg = request.args.get("company_id")
+        if company_arg is not None:
+            company_arg = company_arg.strip()
+            if company_arg == "all" or company_arg == "":
                 selected_company_id = None
+                session.pop("selected_company_id", None)
+            else:
+                try:
+                    selected_company_id = int(company_arg)
+                    session["selected_company_id"] = selected_company_id
+                except ValueError:
+                    selected_company_id = None
+        else:
+            selected_company_id = session.get("selected_company_id")
 
         summary = db.admin_get_summary_counts(selected_company_id)
         severity_counts = db.admin_task_counts_by("severity", selected_company_id)
         impact_counts = db.admin_task_counts_by("impact", selected_company_id)
-        compliance_percent = 0
-        if summary["total_tasks"]:
-            compliance_percent = round((summary["total_completed"] / summary["total_tasks"]) * 100, 1)
+        # Task compliance based on fully completed tasks across assignments
+        task_compliance_percent = 0
         compliance = db.admin_user_compliance(selected_company_id)
         pending_non_overdue = max(summary["total_pending"] - summary.get("total_overdue", 0), 0)
         user_metrics = {
@@ -168,7 +173,9 @@ def dashboard():
             "completed_users": sum(1 for r in compliance if (r["pending_tasks"] or 0) == 0),
             "pending_users": sum(1 for r in compliance if (r["pending_tasks"] or 0) > 0),
             "overdue_users": sum(1 for r in compliance if (r["overdue_tasks"] or 0) > 0),
+            "compliance_pct": 0,
         }
+        user_metrics["compliance_pct"] = round((user_metrics["completed_users"] / user_metrics["total_users"]) * 100, 1) if user_metrics["total_users"] else 0
         settings_row = db.admin_get_app_settings()
         settings = dict(settings_row) if settings_row else {}
         def _parse_color_map(val):
@@ -202,12 +209,62 @@ def dashboard():
         completion_labels = ["Completed", "Pending", "Overdue"]
         completion_defaults = ['#16a34a', '#f59e0b', '#ef4444']
         completion_palette = _palette_for_labels(completion_labels, completion_defaults, completion_map)
+        tasks = db.admin_get_all_tasks(selected_company_id)
+        # Task metrics: base totals on unique tasks, overlay completion from assignments
+        rollup = db.admin_task_completion_rollup(selected_company_id)
+        tasks_json = []
+        for t in tasks:
+            base = {k: t[k] for k in t.keys()}
+            comp = rollup.get(t["id"], {"completed": 0, "total": 0})
+            base["assign_completed"] = comp.get("completed", 0)
+            base["assign_total"] = comp.get("total", 0)
+            base["fully_completed"] = base["assign_total"] > 0 and base["assign_completed"] == base["assign_total"]
+            base["completion_pct"] = round((base["assign_completed"] / base["assign_total"]) * 100, 1) if base["assign_total"] else 0
+            tasks_json.append(base)
+        task_total = len(tasks_json)
+        task_overdue = sum(1 for t in tasks_json if t.get("overdue"))
+        task_completed = sum(1 for t in tasks_json if t.get("fully_completed"))
+        task_pending = task_total - task_completed
+        # Compliance based on fully completed tasks
+        task_compliance_percent = round((task_completed / task_total) * 100, 1) if task_total else 0
+        # Build a simple severity x impact matrix for a risk view
+        def build_risk_matrix(task_list):
+            severities = []
+            impacts = []
+            for t in task_list:
+                sev = t.get("severity") or "Unspecified"
+                imp = t.get("impact") or "Unspecified"
+                if sev not in severities:
+                    severities.append(sev)
+                if imp not in impacts:
+                    impacts.append(imp)
+            severities_sorted = sorted(severities)
+            impacts_sorted = sorted(impacts)
+            counts = {sev: {imp: 0 for imp in impacts_sorted} for sev in severities_sorted}
+            for t in task_list:
+                sev = t.get("severity") or "Unspecified"
+                imp = t.get("impact") or "Unspecified"
+                counts.setdefault(sev, {imp_key:0 for imp_key in impacts_sorted})
+                counts[sev].setdefault(imp, 0)
+                counts[sev][imp] += 1
+            return {
+                "severity_labels": severities_sorted,
+                "impact_labels": impacts_sorted,
+                "counts": counts,
+            }
+        risk_matrix = build_risk_matrix(tasks_json)
+        task_counts = {
+            "total": task_total,
+            "completed": task_completed,
+            "pending": task_pending,
+            "overdue": task_overdue,
+        }
         return render_template(
             "admin_task_dashboard.html",
             summary=summary,
             severity_counts=severity_counts,
             impact_counts=impact_counts,
-            compliance_percent=compliance_percent,
+            compliance_percent=task_compliance_percent,
             compliance=compliance,
             pending_non_overdue=pending_non_overdue,
             severity_palette=severity_palette,
@@ -218,6 +275,9 @@ def dashboard():
             is_company_admin=False,
             user_metrics=user_metrics,
             user=user,
+            tasks=tasks_json,
+            task_counts=task_counts,
+            risk_matrix=risk_matrix,
             page_name="templates/admin_task_dashboard.html",
         )
     if user["role"] == "company_admin" and request.args.get("view") != "personal":
@@ -225,9 +285,7 @@ def dashboard():
         summary = db.admin_get_summary_counts(selected_company_id)
         severity_counts = db.admin_task_counts_by("severity", selected_company_id)
         impact_counts = db.admin_task_counts_by("impact", selected_company_id)
-        compliance_percent = 0
-        if summary["total_tasks"]:
-            compliance_percent = round((summary["total_completed"] / summary["total_tasks"]) * 100, 1)
+        task_compliance_percent = 0
         compliance = db.admin_user_compliance(selected_company_id)
         pending_non_overdue = max(summary["total_pending"] - summary.get("total_overdue", 0), 0)
         user_metrics = {
@@ -235,7 +293,9 @@ def dashboard():
             "completed_users": sum(1 for r in compliance if (r["pending_tasks"] or 0) == 0),
             "pending_users": sum(1 for r in compliance if (r["pending_tasks"] or 0) > 0),
             "overdue_users": sum(1 for r in compliance if (r["overdue_tasks"] or 0) > 0),
+            "compliance_pct": 0,
         }
+        user_metrics["compliance_pct"] = round((user_metrics["completed_users"] / user_metrics["total_users"]) * 100, 1) if user_metrics["total_users"] else 0
         settings_row = db.admin_get_app_settings()
         settings = dict(settings_row) if settings_row else {}
         def _parse_color_map(val):
@@ -269,12 +329,60 @@ def dashboard():
         completion_labels = ["Completed", "Pending", "Overdue"]
         completion_defaults = ['#16a34a', '#f59e0b', '#ef4444']
         completion_palette = _palette_for_labels(completion_labels, completion_defaults, completion_map)
+        tasks = db.admin_get_all_tasks(selected_company_id)
+        # Task metrics: base totals on unique tasks, overlay completion from assignments
+        rollup = db.admin_task_completion_rollup(selected_company_id)
+        tasks_json = []
+        for t in tasks:
+            base = {k: t[k] for k in t.keys()}
+            comp = rollup.get(t["id"], {"completed": 0, "total": 0})
+            base["assign_completed"] = comp.get("completed", 0)
+            base["assign_total"] = comp.get("total", 0)
+            base["fully_completed"] = base["assign_total"] > 0 and base["assign_completed"] == base["assign_total"]
+            base["completion_pct"] = round((base["assign_completed"] / base["assign_total"]) * 100, 1) if base["assign_total"] else 0
+            tasks_json.append(base)
+        task_total = len(tasks_json)
+        task_overdue = sum(1 for t in tasks_json if t.get("overdue"))
+        task_completed = sum(1 for t in tasks_json if t.get("fully_completed"))
+        task_pending = task_total - task_completed
+        task_compliance_percent = round((task_completed / task_total) * 100, 1) if task_total else 0
+        def build_risk_matrix(task_list):
+            severities = []
+            impacts = []
+            for t in task_list:
+                sev = t.get("severity") or "Unspecified"
+                imp = t.get("impact") or "Unspecified"
+                if sev not in severities:
+                    severities.append(sev)
+                if imp not in impacts:
+                    impacts.append(imp)
+            severities_sorted = sorted(severities)
+            impacts_sorted = sorted(impacts)
+            counts = {sev: {imp: 0 for imp in impacts_sorted} for sev in severities_sorted}
+            for t in task_list:
+                sev = t.get("severity") or "Unspecified"
+                imp = t.get("impact") or "Unspecified"
+                counts.setdefault(sev, {imp_key:0 for imp_key in impacts_sorted})
+                counts[sev].setdefault(imp, 0)
+                counts[sev][imp] += 1
+            return {
+                "severity_labels": severities_sorted,
+                "impact_labels": impacts_sorted,
+                "counts": counts,
+            }
+        risk_matrix = build_risk_matrix(tasks_json)
+        task_counts = {
+            "total": task_total,
+            "completed": task_completed,
+            "pending": task_pending,
+            "overdue": task_overdue,
+        }
         return render_template(
             "admin_task_dashboard.html",
             summary=summary,
             severity_counts=severity_counts,
             impact_counts=impact_counts,
-            compliance_percent=compliance_percent,
+            compliance_percent=task_compliance_percent,
             compliance=compliance,
             pending_non_overdue=pending_non_overdue,
             severity_palette=severity_palette,
@@ -285,6 +393,9 @@ def dashboard():
             is_company_admin=True,
             user_metrics=user_metrics,
             user=user,
+            tasks=tasks_json,
+            task_counts=task_counts,
+            risk_matrix=risk_matrix,
             page_name="templates/admin_task_dashboard.html",
         )
 
@@ -431,6 +542,63 @@ def admin_dashboard():
         total_companies=total_companies,
         active_companies=active_companies,
         page_name="templates/admin_dashboard.html",
+    )
+
+
+@app.route("/dashboard/users")
+@login_required
+def user_dashboard():
+    """User-focused dashboard showing user metrics and completion status."""
+    user = current_user()
+    if user["role"] not in ("admin", "company_admin"):
+        return "Access denied", 403
+
+    # Company selection
+    if user["role"] == "admin":
+        selected_company_id = None
+        company_arg = request.args.get("company_id")
+        if company_arg is not None:
+            company_arg = company_arg.strip()
+            if company_arg == "all" or company_arg == "":
+                selected_company_id = None
+                session.pop("selected_company_id", None)
+            else:
+                try:
+                    selected_company_id = int(company_arg)
+                    session["selected_company_id"] = selected_company_id
+                except ValueError:
+                    selected_company_id = None
+        else:
+            selected_company_id = session.get("selected_company_id")
+    else:
+        selected_company_id = user.get("company_id")
+
+    summary = db.admin_get_summary_counts(selected_company_id)
+    compliance = db.admin_user_compliance(selected_company_id)
+    pending_non_overdue = max(summary["total_pending"] - summary.get("total_overdue", 0), 0)
+    user_metrics = {
+        "total_users": len(compliance),
+        "completed_users": sum(1 for r in compliance if (r["pending_tasks"] or 0) == 0),
+        "pending_users": sum(1 for r in compliance if (r["pending_tasks"] or 0) > 0),
+        "overdue_users": sum(1 for r in compliance if (r["overdue_tasks"] or 0) > 0),
+    }
+    user_metrics["compliance_pct"] = round((user_metrics["completed_users"] / user_metrics["total_users"]) * 100, 1) if user_metrics["total_users"] else 0
+
+    companies = db.admin_get_companies()
+    if user["role"] == "company_admin" and selected_company_id:
+        companies = [db.admin_get_company(selected_company_id)]
+
+    return render_template(
+        "user_dashboard.html",
+        user=user,
+        summary=summary,
+        compliance=compliance,
+        pending_non_overdue=pending_non_overdue,
+        user_metrics=user_metrics,
+        companies=companies,
+        selected_company_id=selected_company_id,
+        is_company_admin=user["role"] == "company_admin",
+        page_name="templates/user_dashboard.html",
     )
 
 

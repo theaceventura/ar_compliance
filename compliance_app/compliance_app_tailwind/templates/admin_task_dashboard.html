@@ -35,22 +35,31 @@
 
 <div class="bg-white shadow rounded relative" data-widget-id="admin-dashboard-metrics">
     <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Task Metrics</div>
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 p-4">
-        <div class="bg-slate-50 border border-slate-100 p-4 rounded text-center">
-            <div class="text-sm text-slate-500">Total tasks</div>
-            <div class="text-2xl">{{ summary.total_tasks }}</div>
-        </div>
-        <div class="bg-slate-50 border border-slate-100 p-4 rounded text-center">
+    <div class="grid grid-cols-1 md:grid-cols-5 gap-4 p-4">
+        <button type="button" data-metric-target="charts" class="bg-slate-50 border border-slate-100 p-4 rounded text-center hover:border-blue-300 hover:shadow focus:outline-none focus:ring" data-summary="all">
+            <div class="text-sm text-slate-500">Total Tasks</div>
+            <div class="text-2xl font-semibold">{{ task_counts.total }}</div>
+        </button>
+        <button type="button" data-metric-target="completion-card" class="bg-slate-50 border border-slate-100 p-4 rounded text-center hover:border-blue-300 hover:shadow focus:outline-none focus:ring" data-summary="completed">
             <div class="text-sm text-slate-500">Completed</div>
-            <div class="text-2xl text-green-600">{{ summary.total_completed }}</div>
-        </div>
-        <div class="bg-slate-50 border border-slate-100 p-4 rounded text-center">
+            <div class="text-2xl font-semibold text-green-700">{{ task_counts.completed }} / {{ task_counts.total }}</div>
+        </button>
+        <button type="button" data-metric-target="completion-card" class="bg-slate-50 border border-slate-100 p-4 rounded text-center hover:border-blue-300 hover:shadow focus:outline-none focus:ring" data-summary="pending">
             <div class="text-sm text-slate-500">Pending</div>
-            <div class="text-2xl text-amber-600">{{ summary.total_pending }}</div>
-        </div>
-        <div class="bg-slate-50 border border-slate-100 p-4 rounded text-center">
+            <div class="text-2xl font-semibold text-amber-700">{{ task_counts.pending }} / {{ task_counts.total }}</div>
+        </button>
+        <button type="button" data-metric-target="completion-card" class="bg-slate-50 border border-slate-100 p-4 rounded text-center hover:border-blue-300 hover:shadow focus:outline-none focus:ring" data-summary="overdue">
+            <div class="text-sm text-slate-500">Overdue</div>
+            <div class="text-2xl font-semibold text-red-700">{{ task_counts.overdue }} / {{ task_counts.total }}</div>
+        </button>
+        <button type="button" data-metric-target="user-status" class="bg-slate-50 border border-slate-100 p-4 rounded text-center hover:border-blue-300 hover:shadow focus:outline-none focus:ring" data-summary="all">
             <div class="text-sm text-slate-500">Compliance</div>
-            <div class="text-2xl">{{ compliance_percent }}%</div>
+            <div class="text-2xl font-semibold text-emerald-700">{{ compliance_percent }}%</div>
+        </button>
+    </div>
+    <div class="px-4 pb-4">
+        <div class="bg-slate-50 border border-slate-100 rounded p-3 text-sm text-slate-600">
+            Task metrics are task-based: Completed counts tasks where every assigned user finished; Pending is total minus completed; Overdue counts tasks past due; Compliance is completed tasks divided by total tasks.
         </div>
     </div>
 </div>
@@ -58,110 +67,105 @@
 <div class="bg-white shadow rounded relative mt-8" data-widget-id="admin-dashboard-charts">
     <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Charts</div>
     <div class="p-4">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div class="bg-slate-50 border border-slate-100 p-4 rounded">
-                <h3 class="text-sm font-semibold text-slate-700 mb-3">Severity distribution</h3>
-                <canvas id="severityChart" height="200"></canvas>
-            </div>
-            <div class="bg-slate-50 border border-slate-100 p-4 rounded">
-                <h3 class="text-sm font-semibold text-slate-700 mb-3">Impact distribution</h3>
-                <canvas id="impactChart" height="200"></canvas>
-            </div>
-            <div class="bg-slate-50 border border-slate-100 p-4 rounded">
-                <h3 class="text-sm font-semibold text-slate-700 mb-3">Completion distribution (Overview Tasks)</h3>
-                <canvas id="completionChart" height="200"></canvas>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="mt-6 bg-white shadow rounded relative" data-widget-id="admin-dashboard-users">
-    <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">User Metrics</div>
-    <div class="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div class="bg-slate-50 border border-slate-100 p-4 rounded text-center">
-            <div class="text-sm text-slate-500">Total Users</div>
-            <div class="text-2xl font-semibold">{{ user_metrics.total_users }}</div>
-        </div>
-        <div class="bg-slate-50 border border-slate-100 p-4 rounded text-center">
-            <div class="text-sm text-slate-500">Users Completed All Tasks</div>
-            <div class="text-2xl font-semibold text-green-700">{{ user_metrics.completed_users }}</div>
-        </div>
-        <div class="bg-slate-50 border border-slate-100 p-4 rounded text-center">
-            <div class="text-sm text-slate-500">Users Pending/Overdue</div>
-            <div class="text-2xl font-semibold text-amber-700">{{ user_metrics.pending_users }}</div>
-            {% if user_metrics.overdue_users > 0 %}
-                <div class="mt-1 text-xs text-red-700 font-semibold">Overdue: {{ user_metrics.overdue_users }}</div>
-            {% endif %}
-        </div>
-    </div>
-</div>
-
-<div class="mt-8 bg-white shadow rounded relative" data-widget-id="admin-dashboard-user-status">
-    <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700 flex items-center justify-between">
-        <h3 class="text-lg">User Completion Status</h3>
-        <div class="space-x-3 text-sm">
-            <a href="/admin/report/summary.csv" class="text-blue-600 hover:underline">Download summary CSV</a>
-            <a href="/admin/notify/overdue" class="text-blue-600 hover:underline">Send overdue notifications</a>
-            <a href="/admin/users" class="text-blue-600 hover:underline">User Admin</a>
-        </div>
-    </div>
-    <div class="p-4 space-y-2 text-sm">
-        <div class="grid grid-cols-[1fr,120px,160px,120px,120px] gap-2 items-center bg-slate-100 px-3 py-2 rounded font-semibold text-slate-700">
-            <div class="text-left">Username</div>
-            <div class="text-center">Role</div>
-            <div class="text-center">Completed / Total</div>
-            <div class="text-center">Compliance</div>
-            <div class="text-center">Report</div>
-        </div>
-        <div class="flex items-center space-x-4 text-xs text-slate-600 px-1">
-            <span class="inline-flex items-center space-x-1">
-                <span class="w-3 h-3 rounded border border-amber-200 bg-amber-50 inline-block"></span>
-                <span>Pending tasks remain</span>
-            </span>
-            <span class="inline-flex items-center space-x-1">
-                <span class="w-3 h-3 rounded border border-slate-200 bg-slate-50 inline-block"></span>
-                <span>All tasks completed</span>
-            </span>
-            <span class="inline-flex items-center space-x-1">
-                <span class="w-3 h-3 rounded bg-red-600 inline-block"></span>
-                <span>Overdue count badge</span>
-            </span>
-        </div>
-        {% for row in compliance %}
-            {% set total = row.total_tasks or 0 %}
-            {% set completed = row.completed_tasks or 0 %}
-            {% set pending = row.pending_tasks or (total - completed) %}
-            {% set pct = (completed / total * 100) if total else 0 %}
-            {% set overdue = row.overdue_tasks or 0 %}
-            {% set base_bg = 'bg-slate-50' if loop.index0 % 2 == 0 else 'bg-slate-100/60' %}
-            <div class="grid grid-cols-[1fr,120px,160px,120px,120px] gap-2 items-center px-3 py-2 rounded {% if pending > 0 %}bg-amber-50 border border-amber-200{% else %}{{ base_bg }}{% endif %}">
-                <div class="text-left truncate">{{ row.username }}</div>
-                <div class="text-center">{{ row.role }}</div>
-                <div class="text-center">{{ completed }} / {{ total }}</div>
-                <div class="text-center">{{ pct|round(1) }}%</div>
-                <div class="text-center">
-                    {% if overdue > 0 %}
-                        <div class="text-xs text-red-700 font-semibold mb-1">Overdue: {{ overdue }}</div>
-                    {% endif %}
-                    {% if is_company_admin %}
-                        <a href="/company-admin/report/{{ row.id }}" class="text-blue-600 hover:underline">View</a>
-                    {% else %}
-                        <a href="/admin/report/{{ row.id }}" class="text-blue-600 hover:underline">View</a>
-                    {% endif %}
+        <div id="charts" class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div id="severity-card" class="bg-slate-50 border border-slate-100 p-4 rounded">
+                <h3 class="text-sm font-semibold text-slate-700 mb-3">Task Severity</h3>
+                <div class="flex justify-center">
+                    <canvas id="severityChart" width="220" height="220"></canvas>
                 </div>
             </div>
-        {% endfor %}
+            <div id="impact-card" class="bg-slate-50 border border-slate-100 p-4 rounded">
+                <h3 class="text-sm font-semibold text-slate-700 mb-3">Task Impact</h3>
+                <div class="flex justify-center">
+                    <canvas id="impactChart" width="220" height="220"></canvas>
+                </div>
+            </div>
+            <div id="completion-card" class="bg-slate-50 border border-slate-100 p-4 rounded">
+                <h3 class="text-sm font-semibold text-slate-700 mb-3">Task Completion</h3>
+                <div class="flex justify-center">
+                    <canvas id="completionChart" width="220" height="220"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="mt-6 bg-white shadow rounded relative" data-widget-id="admin-dashboard-risk-matrix">
+    <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700 flex items-center justify-between">
+        <span>Risk Matrix (Severity × Impact)</span>
+    </div>
+    <div class="p-4 overflow-x-auto">
+        <style>
+            .risk-low { background: #d1fae5; }
+            .risk-med { background: #fef9c3; }
+            .risk-high { background: #fee2e2; }
+            .risk-cell { border: 1px solid #e2e8f0; }
+        </style>
+        {% if risk_matrix.severity_labels and risk_matrix.impact_labels %}
+            {% set max_score = (risk_matrix.severity_labels|length - 1) + (risk_matrix.impact_labels|length - 1) %}
+            <div class="flex flex-col space-y-3">
+                <div class="flex items-center text-sm font-semibold text-slate-700 mb-1">
+                    <span class="inline-block" style="width:140px;"></span>
+                    <span>Impact →</span>
+                </div>
+                <table class="min-w-full text-sm text-slate-700 border border-slate-100">
+                    <colgroup>
+                        <col style="width:140px;">
+                    </colgroup>
+                    <thead class="bg-slate-50">
+                        <tr>
+                            <th class="px-3 py-2 text-center border-b border-slate-100">Severity ↓</th>
+                            {% for imp in risk_matrix.impact_labels %}
+                                <th class="px-3 py-2 text-center border-b border-l border-slate-100">{{ imp }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for sev in risk_matrix.severity_labels %}
+                            {% set sev_idx = loop.index0 %}
+                            <tr class="{% if loop.index0 % 2 == 0 %}bg-white{% else %}bg-slate-50{% endif %}">
+                                <td class="px-3 py-2 font-semibold border-t border-slate-100 text-center">{{ sev }}</td>
+                                {% for imp in risk_matrix.impact_labels %}
+                                    {% set score = sev_idx + loop.index0 %}
+                                    {% set tier = 'risk-low' %}
+                                    {% if score >= max_score - 1 %}
+                                        {% set tier = 'risk-high' %}
+                                    {% elif score >= (max_score // 2) %}
+                                        {% set tier = 'risk-med' %}
+                                    {% endif %}
+                                    <td class="px-3 py-2 text-center border-t border-l border-slate-100 risk-cell {{ tier }}">
+                                        <div class="font-semibold">{{ risk_matrix.counts[sev][imp] }}</div>
+                                        <div class="text-xs text-slate-600">
+                                            {% if tier == 'risk-high' %}High{% elif tier == 'risk-med' %}Medium{% else %}Low{% endif %}
+                                        </div>
+                                    </td>
+                                {% endfor %}
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="flex items-center space-x-3 text-xs text-slate-600 mt-3">
+                <span class="inline-flex items-center space-x-1"><span class="w-3 h-3 rounded risk-high inline-block"></span><span>High</span></span>
+                <span class="inline-flex items-center space-x-1"><span class="w-3 h-3 rounded risk-med inline-block"></span><span>Medium</span></span>
+                <span class="inline-flex items-center space-x-1"><span class="w-3 h-3 rounded risk-low inline-block"></span><span>Low</span></span>
+            </div>
+        {% else %}
+            <div class="text-sm text-slate-500">No tasks available to build a risk matrix.</div>
+        {% endif %}
     </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+document.addEventListener('DOMContentLoaded', () => {
     const severityData = {{ severity_counts|map(attribute='count')|list|tojson }};
     const severityLabels = {{ severity_counts|map(attribute='label')|list|tojson }};
     const impactData = {{ impact_counts|map(attribute='count')|list|tojson }};
     const impactLabels = {{ impact_counts|map(attribute='label')|list|tojson }};
-    const completionData = [{{ summary.total_completed }}, {{ pending_non_overdue }}, {{ summary.total_overdue }}];
-    const completionLabels = ["Completed", "Pending", "Overdue"];
+        const completionData = [{{ task_counts.completed }}, {{ task_counts.pending }}, {{ task_counts.overdue }}];
+        const completionLabels = ["Completed", "Pending", "Overdue"];
+    const allTasks = {{ tasks|tojson }};
 
     const palette = ['#2563eb','#16a34a','#f59e0b','#ef4444','#8b5cf6','#0ea5e9'];
 
@@ -189,5 +193,159 @@
     makePie('severityChart', severityLabels, severityData, {{ severity_palette|tojson }});
     makePie('impactChart', impactLabels, impactData, {{ impact_palette|tojson }});
     makePie('completionChart', completionLabels, completionData, {{ completion_palette|tojson }});
+
+    // User metric filters -> scroll to table and filter rows
+    const metricButtons = document.querySelectorAll('[data-user-filter]');
+    const userRows = document.querySelectorAll('.user-status-row');
+    const statusSection = document.getElementById('user-status');
+    function applyUserFilter(mode) {
+        userRows.forEach(row => {
+            const pending = parseInt(row.dataset.pending || '0', 10);
+            const overdue = parseInt(row.dataset.overdue || '0', 10);
+            let show = true;
+            if (mode === 'complete') {
+                show = pending === 0 && overdue === 0;
+            } else if (mode === 'pending') {
+                show = pending > 0;
+            } else if (mode === 'overdue') {
+                show = overdue > 0;
+            }
+            row.style.display = show ? '' : 'none';
+        });
+        if (statusSection) {
+            statusSection.scrollIntoView({ behavior: 'smooth' });
+        }
+    }
+    metricButtons.forEach(btn => {
+        btn.addEventListener('click', () => applyUserFilter(btn.dataset.userFilter || 'all'));
+    });
+
+    // Task metric clicks -> scroll/highlight chart or table
+    const taskMetricButtons = document.querySelectorAll('[data-metric-target]');
+    function highlightCard(id) {
+        document.querySelectorAll('.ring-highlight').forEach(el => el.classList.remove('ring-highlight'));
+        if (!id) return;
+        const el = document.getElementById(id);
+        if (el) {
+            el.classList.add('ring-highlight');
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }
+    taskMetricButtons.forEach(btn => {
+        btn.addEventListener('click', () => highlightCard(btn.dataset.metricTarget));
+    });
+
+    // Task metric popup summaries
+    const modal = document.getElementById('task-modal');
+    const modalContent = document.getElementById('task-modal-content');
+    const modalClose = document.getElementById('task-modal-close');
+        function showTasks(filter) {
+            if (!modal || !modalContent) return;
+            let list = allTasks || [];
+            modalContent.innerHTML = '';
+            if (filter === 'completed') {
+                list = list.filter(t => t.fully_completed);
+            } else if (filter === 'pending') {
+                list = list.filter(t => !t.fully_completed);
+            } else if (filter === 'overdue') {
+                list = list.filter(t => t.overdue);
+            }
+            const wrapper = document.createElement('div');
+            wrapper.className = 'space-y-2 text-sm';
+            const header = document.createElement('div');
+            header.className = 'grid grid-cols-[280px,90px,160px,100px] gap-2 items-center bg-slate-100 px-3 py-2 rounded font-semibold text-slate-700 text-center';
+            header.innerHTML = `
+                <div class="text-left">Task</div>
+                <div class="text-center">% Complete</div>
+                <div class="text-center">No. Users Assigned</div>
+                <div class="text-center">Status</div>
+            `;
+            wrapper.appendChild(header);
+            if (list.length) {
+                list.forEach((t, idx) => {
+                    const base = idx % 2 === 0 ? 'bg-slate-50' : 'bg-slate-100/60';
+                    const row = document.createElement('div');
+                    const overdue = t.overdue ? 'bg-red-50 border border-red-200' : base;
+                    row.className = `grid grid-cols-[280px,90px,160px,100px] gap-2 items-center px-3 py-2 rounded text-center ${overdue}`;
+                    const totalAssign = t.assign_total || 0;
+                    const done = t.assign_completed || 0;
+                    const pct = t.completion_pct || 0;
+                    const flag = t.overdue
+                        ? '<span class="text-red-700 font-semibold">Overdue</span>'
+                        : (t.fully_completed ? '<span class="text-green-700 font-semibold">Completed</span>' : '<span class="text-slate-600">Pending</span>');
+                    row.innerHTML = `
+                        <div class="text-left text-base font-semibold text-slate-900">${t.title || 'Untitled'}</div>
+                        <div class="text-center text-xs text-slate-700">${pct}%</div>
+                        <div class="text-center text-xs text-slate-700">${done}/${totalAssign || 0}</div>
+                        <div class="text-center text-xs">${flag}</div>
+                    `;
+                    wrapper.appendChild(row);
+                });
+                const totalsRow = document.createElement('div');
+                const avgPct = list.length ? Math.round(list.reduce((s, t) => s + (t.completion_pct || 0), 0) / list.length) : 0;
+                const totalAssignSum = list.reduce((s, t) => s + (t.assign_total || 0), 0);
+                const totalDoneSum = list.reduce((s, t) => s + (t.assign_completed || 0), 0);
+                totalsRow.className = 'grid grid-cols-[280px,90px,160px,100px] gap-2 items-center px-3 py-2 rounded bg-slate-200 text-sm font-semibold text-slate-800 text-center';
+                totalsRow.innerHTML = `
+                    <div class="text-left">Average / Totals</div>
+                    <div>${avgPct}%</div>
+                    <div>${totalDoneSum}/${totalAssignSum}</div>
+                    <div></div>
+                `;
+                wrapper.appendChild(totalsRow);
+            } else {
+                const p = document.createElement('p');
+                p.className = 'text-sm text-slate-600 px-3 py-2';
+                p.textContent = 'No tasks found for this category.';
+                wrapper.appendChild(p);
+            }
+            modalContent.appendChild(wrapper);
+            modal.classList.remove('hidden');
+        }
+    document.querySelectorAll('[data-metric-target]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = btn.dataset.metricTarget;
+            highlightCard(target);
+            const summaryFilter = btn.dataset.summary || 'all';
+            if (target === 'completion-card' && summaryFilter === 'pending') {
+                showTasks('pending');
+            } else {
+                showTasks(summaryFilter);
+            }
+        });
+    });
+    const overdueButton = document.querySelector('[data-user-filter="overdue"]');
+    if (overdueButton) {
+        overdueButton.addEventListener('dblclick', () => showTasks('overdue'));
+    }
+    const pendingButton = document.querySelector('[data-user-filter="pending"]');
+    if (pendingButton) {
+        pendingButton.addEventListener('dblclick', () => showTasks('pending'));
+    }
+    const totalButton = document.querySelector('[data-user-filter="all"]');
+    if (totalButton) {
+        totalButton.addEventListener('dblclick', () => showTasks('all'));
+    }
+    if (modalClose) {
+        modalClose.addEventListener('click', () => modal.classList.add('hidden'));
+    }
+    modal?.addEventListener('click', (e) => {
+        if (e.target === modal) modal.classList.add('hidden');
+    });
+});
 </script>
+
+<style>
+    .ring-highlight { box-shadow: 0 0 0 3px rgba(59,130,246,0.4); transition: box-shadow 0.3s ease; }
+</style>
+
+<div id="task-modal" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
+    <div class="bg-white rounded shadow-lg max-w-3xl w-11/12 md:w-3/4">
+        <div class="flex items-center justify-between px-4 py-2 border-b">
+            <h4 class="font-semibold text-slate-800">Task Summary</h4>
+            <button id="task-modal-close" class="text-slate-500 hover:text-slate-700">&times;</button>
+        </div>
+        <div id="task-modal-content" class="p-4 max-h-[60vh] overflow-y-auto space-y-2 text-sm text-slate-700"></div>
+    </div>
+</div>
 {% endblock %}

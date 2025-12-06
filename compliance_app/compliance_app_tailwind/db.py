@@ -106,6 +106,8 @@ def create_tables_if_needed():
         cur.execute("ALTER TABLE users ADD COLUMN mobile TEXT")
     if not _column_exists(cur, "users", "send_notifications"):
         cur.execute("ALTER TABLE users ADD COLUMN send_notifications INTEGER DEFAULT 0")
+    if not _column_exists(cur, "users", "is_active"):
+        cur.execute("ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1")
     if not _column_exists(cur, "users", "company_id"):
         cur.execute("ALTER TABLE users ADD COLUMN company_id INTEGER")
         cur.execute("UPDATE users SET company_id=1 WHERE company_id IS NULL")
@@ -973,3 +975,35 @@ def admin_update_company(company_id, name, admin_user_id=None, address1=None, ad
         return "Company name must be unique."
     finally:
         conn.close()
+
+# Admin: task completion rollup (assignments)
+def admin_task_completion_rollup(company_id=None):
+    """Return per-task assignment counts (completed vs total) scoped by company if provided."""
+    conn = get_connection()
+    cur = conn.cursor()
+    if company_id is None:
+        cur.execute("""
+            SELECT ut.task_id,
+                   SUM(CASE WHEN ut.status='completed' THEN 1 ELSE 0 END) as completed,
+                   COUNT(*) as total
+            FROM user_tasks ut
+            JOIN users u ON u.id = ut.user_id
+            JOIN tasks t ON t.id = ut.task_id
+            WHERE (t.company_id IS NULL OR t.company_id = u.company_id)
+            GROUP BY ut.task_id
+        """)
+    else:
+        cur.execute("""
+            SELECT ut.task_id,
+                   SUM(CASE WHEN ut.status='completed' THEN 1 ELSE 0 END) as completed,
+                   COUNT(*) as total
+            FROM user_tasks ut
+            JOIN users u ON u.id = ut.user_id
+            JOIN tasks t ON t.id = ut.task_id
+            WHERE u.company_id=?
+              AND (t.company_id IS NULL OR t.company_id = u.company_id)
+            GROUP BY ut.task_id
+        """, (company_id,))
+    rows = cur.fetchall()
+    conn.close()
+    return {row["task_id"]: {"completed": row["completed"], "total": row["total"]} for row in rows}
