@@ -33,6 +33,7 @@
     </div>
 </div>
 
+{% if show_user_charts %}
 <div class="bg-white shadow rounded relative mb-6" data-widget-id="user-dashboard-charts">
     <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Your task charts</div>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 p-4">
@@ -49,7 +50,33 @@
             <canvas id="completionChart" height="200"></canvas>
         </div>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        const palette = ['#2563eb','#16a34a','#f59e0b','#ef4444','#8b5cf6','#0ea5e9'];
+
+        function makePie(id, labels, data) {
+            const ctx = document.getElementById(id);
+            if (!ctx) return;
+            new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels,
+                    datasets: [{
+                        data,
+                        backgroundColor: labels.map((_, i) => palette[i % palette.length]),
+                        borderWidth: 0
+                    }]
+                },
+                options: { plugins: { legend: { position: 'bottom' } } }
+            });
+        }
+
+        makePie('severityChart', {{ severity_labels|tojson }}, {{ severity_data|tojson }});
+        makePie('impactChart', {{ impact_labels|tojson }}, {{ impact_data|tojson }});
+        makePie('completionChart', ["Completed","Pending","Overdue"], {{ completion_data|tojson }});
+    </script>
 </div>
+{% endif %}
 
 <div class="space-y-6">
 
@@ -115,31 +142,5 @@
     </div>
 
 </div>
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-    const palette = ['#2563eb','#16a34a','#f59e0b','#ef4444','#8b5cf6','#0ea5e9'];
-
-    function makePie(id, labels, data) {
-        const ctx = document.getElementById(id);
-        if (!ctx) return;
-        new Chart(ctx, {
-            type: 'pie',
-            data: {
-                labels,
-                datasets: [{
-                    data,
-                    backgroundColor: labels.map((_, i) => palette[i % palette.length]),
-                    borderWidth: 0
-                }]
-            },
-            options: { plugins: { legend: { position: 'bottom' } } }
-        });
-    }
-
-    makePie('severityChart', {{ severity_labels|tojson }}, {{ severity_data|tojson }});
-    makePie('impactChart', {{ impact_labels|tojson }}, {{ impact_data|tojson }});
-    makePie('completionChart', ["Completed","Pending","Overdue"], {{ completion_data|tojson }});
-</script>
 
 {% endblock %}

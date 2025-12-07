@@ -229,6 +229,15 @@
         const labelEditEnabled = {{ (app_settings.show_label_edit if app_settings else 0) | int }};
         if (labelEditEnabled) {
             const addLabelEditors = () => {
+                // Auto-tag common headings if they don't already have a data-label-id
+                const autoTargets = document.querySelectorAll('h1, h2, h3, h4, th, .section-title, .widget-title');
+                let autoIdx = 0;
+                autoTargets.forEach(el => {
+                    if (!el.getAttribute('data-label-id')) {
+                        el.setAttribute('data-label-id', `auto-label-${autoIdx++}`);
+                    }
+                });
+
                 document.querySelectorAll('[data-label-id]').forEach(el => {
                     if (el.dataset.labelEnhanced === '1') return;
                     const edit = document.createElement('span');

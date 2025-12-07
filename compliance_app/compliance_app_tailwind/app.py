@@ -1,3 +1,16 @@
+"""Flask entrypoint for the compliance tracker.
+
+This file wires together:
+- Auth/session helpers (current_user, decorators).
+- Admin dashboards for tasks/companies/users.
+- Company-admin and user dashboards.
+- CRUD routes for tasks, users, companies, app settings.
+- Utility endpoints (task answers, reports, config toggles).
+
+The actual data access lives in db.py; this file focuses on request handling
+and shaping data for templates.
+"""
+
 from flask import Flask, render_template, request, redirect, url_for, session, flash, Response
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, date
@@ -20,7 +33,7 @@ db.create_tables_if_needed()
 # Inject settings into all templates
 @app.context_processor
 def inject_app_settings():
-    """Make app settings available to every template render."""
+    """Make app settings available to every template render and build a small banner payload."""
     settings = db.admin_get_app_settings()
     # Build a lightweight banner object for templates if a user is logged in
     banner = None
@@ -35,7 +48,7 @@ def inject_app_settings():
             }
     def role_label(role):
         mapping = {
-            "admin": "Global Admin",
+            "admin": "Admin",
             "company_admin": "Company Admin",
             "user": "User",
         }
@@ -184,15 +197,18 @@ def dashboard():
             selected_company_id = None
         session.pop("selected_company_id", None)
 
-        # Keep assignment rows in sync with current company/global tasks before rollups
+        # Sync assignment rows for the chosen scope (all companies or a single company)
         db.admin_ensure_assignments_for_company(selected_company_id)
 
+        # Task-level rollups for charts/tiles (admin scope or filtered company)
         summary = db.admin_get_summary_counts(selected_company_id)
         severity_counts = db.admin_task_counts_by("severity", selected_company_id)
         impact_counts = db.admin_task_counts_by("impact", selected_company_id)
         # Task compliance based on fully completed tasks across assignments
         task_compliance_percent = 0
-        compliance = db.admin_user_compliance(selected_company_id)
+        # User compliance rows (one per user, includes task totals/completion)
+        compliance = [dict(r) for r in db.admin_user_compliance(selected_company_id)]
+        compliance.sort(key=lambda u: ((u.get("first_name") or "") + (u.get("last_name") or "") + (u.get("username") or "")).lower())
         pending_non_overdue = max(summary["total_pending"] - summary.get("total_overdue", 0), 0)
         user_metrics = {
             "total_users": len(compliance),
@@ -202,6 +218,7 @@ def dashboard():
             "compliance_pct": 0,
         }
         user_metrics["compliance_pct"] = round((user_metrics["completed_users"] / user_metrics["total_users"]) * 100, 1) if user_metrics["total_users"] else 0
+        # Pull display settings for charts/matrix/palettes
         settings_row = db.admin_get_app_settings()
         settings = dict(settings_row) if settings_row else {}
         def _parse_color_map(val):
@@ -281,19 +298,13 @@ def dashboard():
             "overdue": user_metrics["overdue_users"],
             "compliance": user_metrics["compliance_pct"],
         }
+        # Build per-company aggregates (always include all companies for the table)
         company_summaries = []
         company_totals = None
         company_user_rows = {}
         unassigned_seen = set()
-        # Build per-company aggregates for all companies or the selected one
-        if selected_company_id is None:
-            # Include inactive companies so admin sees full rollup
-            companies_all = db.admin_get_companies(show_inactive=True)
-        else:
-            company_row = db.admin_get_company(selected_company_id)
-            companies_all = [company_row] if company_row else []
-        if not companies_all:
-            companies_all = db.admin_get_companies(show_inactive=True)
+        # Build per-company aggregates for all companies (always show all in the table)
+        companies_all = db.admin_get_companies(show_inactive=True)
         # Keep a copy for the template dropdown so we don't re-hit the DB and so it
         # always matches what we used to build company_summaries.
         companies_for_template = companies_all
@@ -350,17 +361,23 @@ def dashboard():
 
         for c in companies_all:
             users_for_company = []
-            for u in db.admin_user_compliance(c["id"]):
+            company_users = [dict(u) for u in db.admin_user_compliance(c["id"])]
+            for u in company_users:
                 role_val = str(u["role"]).lower() if "role" in u.keys() else ""
                 if role_val in ("admin", "global admin"):
                     continue
                 users_for_company.append(u)
+            users_for_company.sort(key=lambda u: ((u.get("first_name") or "") + (u.get("last_name") or "") + (u.get("username") or "")).lower())
             # store with int and string keys so template lookups always work
             company_user_rows[c["id"]] = users_for_company
             company_user_rows[str(c["id"])] = users_for_company
             rollup_row = _company_rollup(c["id"], c["name"])
             rollup_row["user_count"] = len(company_user_rows[c["id"]])
             company_summaries.append(rollup_row)
+        # Sort summaries A->Z by company name, keep selected company (if any) at top
+        company_summaries.sort(key=lambda r: (r.get("name") or "").lower())
+        if selected_company_id is not None:
+            company_summaries.sort(key=lambda r: (0 if r.get("company_id") == selected_company_id else 1, (r.get("name") or "").lower()))
         try:
             debug_users = {
                 cid: [u["username"] for u in rows]
@@ -370,15 +387,25 @@ def dashboard():
             print("[DBG company users]", debug_users)
         except Exception:
             pass
-        if company_summaries:
-            total_tasks_all = sum(r["tasks_total"] for r in company_summaries)
-            total_completed_all = sum(r["tasks_completed"] for r in company_summaries)
-            total_pending_all = sum(r["tasks_pending"] for r in company_summaries)
-            total_overdue_all = sum(r["tasks_overdue"] for r in company_summaries)
-            total_unassigned_all = sum(r["unassigned"] for r in company_summaries)
-            total_users_all = sum(r.get("user_count", 0) for r in company_summaries)
-            company_totals = {
-                "assignments_total": sum(r.get("assignments_total", 0) for r in company_summaries),
+        # Filter display rows based on selection: show all or only the selected company
+        company_summaries = company_summaries or []
+        company_user_rows = company_user_rows or {}
+        if selected_company_id is None:
+            company_table_rows = company_summaries
+        else:
+            company_table_rows = [r for r in company_summaries if r.get("company_id") == selected_company_id]
+
+        def _totals(rows):
+            if not rows:
+                return None
+            total_tasks_all = sum(r["tasks_total"] for r in rows)
+            total_completed_all = sum(r["tasks_completed"] for r in rows)
+            total_pending_all = sum(r["tasks_pending"] for r in rows)
+            total_overdue_all = sum(r["tasks_overdue"] for r in rows)
+            total_unassigned_all = sum(r["unassigned"] for r in rows)
+            total_users_all = sum(r.get("user_count", 0) for r in rows)
+            return {
+                "assignments_total": sum(r.get("assignments_total", 0) for r in rows),
                 "tasks_total": total_tasks_all,
                 "tasks_completed": total_completed_all,
                 "tasks_pending": total_pending_all,
@@ -387,20 +414,15 @@ def dashboard():
                 "tasks_compliance": round((total_completed_all / total_tasks_all) * 100, 1) if total_tasks_all else 0,
                 "user_count": total_users_all,
             }
-            unassigned_tasks = total_unassigned_all
-        # Ensure template always sees an iterable even if empty
-        company_summaries = company_summaries or []
-        company_user_rows = company_user_rows or {}
+
+        # Totals reflect only what is currently shown in the table (filtered or all)
+        company_totals = _totals(company_table_rows)
+        unassigned_tasks = company_totals["unassigned"] if company_totals else 0
         # Debug: log what we're sending to the template
         try:
-            print(f"[DBG] companies_all={len(companies_all)}, summaries={len(company_summaries)}, user_rows={len(company_user_rows)}")
+            print(f"[DBG] companies_all={len(companies_all)}, summaries={len(company_summaries)}, table_rows={len(company_table_rows)}, user_rows={len(company_user_rows)}")
         except Exception:
             pass
-        # Fallback: ensure the template always receives something iterable
-        if company_summaries is None:
-            company_summaries = []
-        if company_user_rows is None:
-            company_user_rows = {}
         # Build a simple severity x impact matrix for a risk view
         def build_risk_matrix(task_list):
             severities = []
@@ -462,12 +484,17 @@ def dashboard():
             company_summaries=company_summaries,
             company_totals=company_totals,
             company_user_rows=company_user_rows,
+            company_table_rows=company_table_rows,
             risk_matrix=risk_matrix,
             unassigned_details=unassigned_details,
             page_name="templates/admin_task_dashboard.html",
         )
     if user["role"] == "company_admin" and request.args.get("view") != "personal":
+        metric_mode = request.args.get("metric_mode")
+        if metric_mode not in ("task", "user"):
+            metric_mode = "task"
         selected_company_id = user.get("company_id")
+        # Keep assignments in sync for this company before building metrics
         db.admin_ensure_assignments_for_company(selected_company_id)
         company_summaries = []
         company_totals = None
@@ -476,7 +503,7 @@ def dashboard():
         severity_counts = db.admin_task_counts_by("severity", selected_company_id)
         impact_counts = db.admin_task_counts_by("impact", selected_company_id)
         task_compliance_percent = 0
-        compliance = db.admin_user_compliance(selected_company_id)
+        compliance = [dict(r) for r in db.admin_user_compliance(selected_company_id)]
         pending_non_overdue = max(summary["total_pending"] - summary.get("total_overdue", 0), 0)
         user_metrics = {
             "total_users": len(compliance),
@@ -486,6 +513,13 @@ def dashboard():
             "compliance_pct": 0,
         }
         user_metrics["compliance_pct"] = round((user_metrics["completed_users"] / user_metrics["total_users"]) * 100, 1) if user_metrics["total_users"] else 0
+        user_counts = {
+            "total": user_metrics["total_users"],
+            "completed": user_metrics["completed_users"],
+            "pending": user_metrics["pending_users"],
+            "overdue": user_metrics["overdue_users"],
+            "compliance": user_metrics["compliance_pct"],
+        }
         settings_row = db.admin_get_app_settings()
         settings = dict(settings_row) if settings_row else {}
         def _parse_color_map(val):
@@ -606,6 +640,7 @@ def dashboard():
             "tasks_compliance": task_compliance_percent,
             "user_count": len(compliance),
         }]
+        company_table_rows = company_summaries
         company_totals = {
             "assignments_total": assignments_total,
             "tasks_total": task_total,
@@ -636,8 +671,11 @@ def dashboard():
             tasks=tasks_json,
             task_counts=task_counts,
             assignment_counts=assignment_counts,
+            user_counts=user_counts,
+            metric_mode=metric_mode,
             unassigned_tasks=unassigned_tasks,
             company_summaries=company_summaries,
+            company_table_rows=company_table_rows,
             company_totals=company_totals,
             company_user_rows=company_user_rows,
             risk_matrix=risk_matrix,
@@ -648,7 +686,7 @@ def dashboard():
     # Default: personal task view (users and company admins in personal mode)
     # Fetch full profile for name display
     profile_row = db.admin_get_user(user["id"], user.get("company_id"))
-    # Ensure missing assignments are created (global + company tasks)
+    # Ensure missing assignments are created (global + company tasks) before listing
     db.ensure_user_assignments(user["id"], user.get("company_id"))
     user_full = {**user}
     if profile_row:
@@ -704,6 +742,15 @@ def dashboard():
     severity_labels, severity_data = _tally([t["severity"] if "severity" in t.keys() else None for t in tasks])
     impact_labels, impact_data = _tally([t["impact"] if "impact" in t.keys() else None for t in tasks])
     completion_data = [completed_count, pending_non_overdue, pending_overdue]
+    settings_row = db.admin_get_app_settings()
+    app_settings = dict(settings_row) if settings_row else {}
+    show_user_charts = True
+    if user["role"] == "admin":
+        show_user_charts = bool(app_settings.get("show_user_charts_global", 1))
+    elif user["role"] == "company_admin":
+        show_user_charts = bool(app_settings.get("show_user_charts_company", 1))
+    else:
+        show_user_charts = bool(app_settings.get("show_user_charts_user", 1))
 
     return render_template(
         "dashboard.html",
@@ -720,6 +767,8 @@ def dashboard():
         impact_data=impact_data,
         completion_data=completion_data,
         is_company_admin=user["role"] == "company_admin",
+        show_user_charts=show_user_charts,
+        app_settings=app_settings,
         page_name="templates/dashboard.html",
     )
 
@@ -1244,7 +1293,7 @@ def company_admin_users():
     missing = []
     if not username:
         missing.append("Username")
-    if not user_id and not password:
+    if not password:
         missing.append("Password")
     if not first_name:
         missing.append("First Name")
@@ -1254,6 +1303,8 @@ def company_admin_users():
         missing.append("Email")
     if not role:
         missing.append("Role")
+    if not company_id:
+        missing.append("Company")
 
     if missing:
         users = db.admin_get_all_users(company_id)
@@ -1306,6 +1357,15 @@ def admin_companies():
     show_inactive = bool(request.args.get("show_inactive"))
     selected_company = db.admin_get_company(selected_id) if selected_id else None
 
+    def _active_counts(companies_list):
+        active_counts = {}
+        total_counts = {}
+        for co in companies_list or []:
+            users_for_co = db.admin_get_all_users(co["id"])
+            total_counts[co["id"]] = len(users_for_co)
+            active_counts[co["id"]] = sum(1 for u in users_for_co if ("is_active" in u.keys() and u["is_active"]) or ("is_active" not in u.keys()))
+        return active_counts, total_counts
+
     if request.method == "POST":
         company_id = request.form.get("company_id", type=int)
         name = request.form.get("name", "").strip()
@@ -1320,7 +1380,17 @@ def admin_companies():
             error = "Company name is required."
             companies = db.admin_get_companies(show_inactive=show_inactive)
             users_for_company = db.admin_get_all_users(company_id) if company_id else []
-            return render_template("admin_companies.html", companies=companies, selected_company=selected_company, company_users=users_for_company, error=error, page_name="templates/admin_companies.html")
+            active_user_counts, total_user_counts = _active_counts(companies)
+            return render_template(
+                "admin_companies.html",
+                companies=companies,
+                selected_company=selected_company,
+                company_users=users_for_company,
+                active_user_counts=active_user_counts,
+                total_user_counts=total_user_counts,
+                error=error,
+                page_name="templates/admin_companies.html",
+            )
         # Validate admin user belongs to company (when updating existing)
         if admin_user_id and company_id:
             user_row = db.admin_get_user(admin_user_id)
@@ -1328,7 +1398,17 @@ def admin_companies():
                 error = "Selected company admin must belong to this company."
                 companies = db.admin_get_companies(show_inactive=show_inactive)
                 users_for_company = db.admin_get_all_users(company_id) if company_id else []
-                return render_template("admin_companies.html", companies=companies, selected_company=selected_company, company_users=users_for_company, error=error, page_name="templates/admin_companies.html")
+                active_user_counts, total_user_counts = _active_counts(companies)
+                return render_template(
+                    "admin_companies.html",
+                    companies=companies,
+                    selected_company=selected_company,
+                    company_users=users_for_company,
+                    active_user_counts=active_user_counts,
+                    total_user_counts=total_user_counts,
+                    error=error,
+                    page_name="templates/admin_companies.html",
+                )
         if company_id:
             error = db.admin_update_company(company_id, name, admin_user_id, address1, address2, address3, state, postcode, is_active)
             flash_msg = "Company updated."
@@ -1338,13 +1418,32 @@ def admin_companies():
         if error:
             companies = db.admin_get_companies(show_inactive=show_inactive)
             users_for_company = db.admin_get_all_users(company_id) if company_id else []
-            return render_template("admin_companies.html", companies=companies, selected_company=selected_company, company_users=users_for_company, error=error, page_name="templates/admin_companies.html")
+            active_user_counts, total_user_counts = _active_counts(companies)
+            return render_template(
+                "admin_companies.html",
+                companies=companies,
+                selected_company=selected_company,
+                company_users=users_for_company,
+                active_user_counts=active_user_counts,
+                total_user_counts=total_user_counts,
+                error=error,
+                page_name="templates/admin_companies.html",
+            )
         flash(flash_msg)
         return redirect(url_for("admin_companies"))
 
     companies = db.admin_get_companies(show_inactive=show_inactive)
     company_users = db.admin_get_all_users(selected_id) if selected_id else []
-    return render_template("admin_companies.html", companies=companies, selected_company=selected_company, company_users=company_users, page_name="templates/admin_companies.html")
+    active_user_counts, total_user_counts = _active_counts(companies)
+    return render_template(
+        "admin_companies.html",
+        companies=companies,
+        selected_company=selected_company,
+        company_users=company_users,
+        active_user_counts=active_user_counts,
+        total_user_counts=total_user_counts,
+        page_name="templates/admin_companies.html",
+    )
 
 
 # Admin: add an option (impact/severity)
@@ -1427,6 +1526,9 @@ def admin_app_settings():
     show_task_charts = request.form.get("show_task_charts") == "on"
     show_risk_matrix = request.form.get("show_risk_matrix") == "on"
     show_user_banner = request.form.get("show_user_banner") == "on"
+    show_user_charts_global = request.form.get("show_user_charts_global") == "on"
+    show_user_charts_company = request.form.get("show_user_charts_company") == "on"
+    show_user_charts_user = request.form.get("show_user_charts_user") == "on"
     show_validation_notes = request.form.get("show_validation_notes") == "on"
     db.admin_update_app_settings(
         version,
@@ -1438,6 +1540,9 @@ def admin_app_settings():
         show_task_charts,
         show_risk_matrix,
         show_user_banner,
+        show_user_charts_global,
+        show_user_charts_company,
+        show_user_charts_user,
         show_validation_notes,
     )
     flash("Settings updated.")

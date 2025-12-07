@@ -15,7 +15,7 @@
         </h2>
     </div>
     {% if not is_company_admin %}
-    <form method="GET" class="flex items-center space-x-2 text-sm">
+    <form id="company-filter-form" method="GET" class="flex items-center space-x-2 text-sm">
         <label for="companySelect" class="text-slate-700">Company:</label>
         <select id="companySelect" name="company_id" class="border rounded px-2 py-1">
             <option value="all" {% if selected_company_id is none %}selected{% endif %}>All companies</option>
@@ -34,7 +34,9 @@
 
 <div class="bg-white shadow rounded relative mb-4" data-widget-id="admin-dashboard-metrics">
     <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700 flex items-center justify-between">
-        <span data-label-id="heading-task-metrics">Task Metrics</span>
+        <span data-label-id="heading-task-metrics">
+            {% if metric_mode == 'user' %}User Metrics{% else %}Task Metrics{% endif %}
+        </span>
         <div class="flex items-center space-x-2 text-xs text-slate-600">
             <span>Mode:</span>
             <a href="?metric_mode=task" class="px-2 py-1 rounded border {{ 'bg-blue-600 text-white border-blue-600' if metric_mode=='task' else 'border-slate-200' }}">Tasks</a>
@@ -131,11 +133,11 @@
 <div class="bg-white shadow rounded relative mb-4" data-widget-id="admin-dashboard-company-table">
     <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Company Task Summary</div>
     <div class="p-3 space-y-2 text-sm">
-        <div class="text-xs text-slate-500">Companies loaded: {{ company_summaries|length }}</div>
-        {% if company_summaries and company_summaries|length > 0 %}
-            <div class="text-xs text-slate-500">Loaded companies: {{ company_summaries | map(attribute='name') | list | join(', ') }}</div>
+        <div class="text-xs text-slate-500">Companies loaded: {{ company_table_rows|length }}</div>
+        {% if company_table_rows and company_table_rows|length > 0 %}
+            <div class="text-xs text-slate-500">Loaded companies: {{ company_table_rows | map(attribute='name') | list | join(', ') }}</div>
         {% endif %}
-        <div class="tbl-header text-sm grid grid-cols-[2.3fr,0.7fr,0.95fr,0.95fr,0.95fr,0.95fr,0.95fr,1fr] gap-2 items-center">
+        <div class="tbl-header text-sm grid grid-cols-[2.5fr,0.65fr,0.9fr,0.9fr,0.9fr,0.9fr,0.9fr,1.15fr] gap-2 items-center">
             <div class="text-left">Company</div>
             <div class="text-center">Users</div>
             <div class="text-center">Total</div>
@@ -145,16 +147,12 @@
             <div class="text-center">Overdue</div>
             <div class="text-center">Compliance %</div>
         </div>
-        {% for row in company_summaries %}
+        {% for row in company_table_rows %}
             {% set warn = row.unassigned and row.unassigned > 0 %}
-            <div class="tbl-row text-sm grid grid-cols-[2.3fr,0.7fr,0.95fr,0.95fr,0.95fr,0.95fr,0.95fr,1fr] gap-2 items-center {% if loop.index0 % 2 == 1 %}tbl-row-alt{% endif %} {{ 'bg-amber-50 border border-amber-200' if warn else '' }} cursor-pointer" data-company-row data-company-id="{{ row.company_id }}">
-                <div class="text-left font-semibold text-slate-800 truncate text-blue-700">
+            {% set is_selected = selected_company_id is not none and row.company_id == selected_company_id %}
+            <div class="tbl-row text-sm grid grid-cols-[2.5fr,0.65fr,0.9fr,0.9fr,0.9fr,0.9fr,0.9fr,1.15fr] gap-2 items-center {% if loop.index0 % 2 == 1 %}tbl-row-alt{% endif %} {{ 'bg-amber-50 border border-amber-200' if warn else '' }} {{ 'ring-2 ring-blue-300' if is_selected else '' }} cursor-pointer" data-company-row data-company-id="{{ row.company_id }}">
+                <div class="text-left font-semibold text-slate-800 text-blue-700 break-words whitespace-normal">
                     {{ row.name }}
-                    {% if warn %}
-                        <div class="inline-flex items-center mt-1 bg-amber-100 text-amber-800 border border-amber-200 rounded px-2 py-1 text-[11px] font-semibold">
-                            No user assigned to {{ row.unassigned }} task{% if row.unassigned != 1 %}s{% endif %} (excluded)
-                        </div>
-                    {% endif %}
                 </div>
                 <div class="text-center font-semibold text-slate-800">{{ row.user_count }}</div>
                 <div class="text-center">{{ row.tasks_total }}</div>
@@ -201,11 +199,11 @@
                 {% endif %}
             </div>
         {% endfor %}
-        {% if company_summaries|length == 0 %}
+        {% if company_table_rows|length == 0 %}
             <div class="tbl-empty text-sm">No companies to display.</div>
         {% endif %}
         {% if company_totals %}
-            <div class="tbl-row text-sm grid grid-cols-[2.3fr,0.7fr,0.95fr,0.95fr,0.95fr,0.95fr,0.95fr,1fr] gap-2 items-center bg-slate-200 font-semibold text-slate-900">
+            <div class="tbl-row text-sm grid grid-cols-[2.5fr,0.65fr,0.9fr,0.9fr,0.9fr,0.9fr,0.9fr,1.15fr] gap-2 items-center bg-slate-200 font-semibold text-slate-900">
                 <div class="text-left">Total</div>
                 <div class="text-center">{{ company_totals.user_count }}</div>
                 <div class="text-center">{{ company_totals.tasks_total }}</div>
@@ -215,12 +213,17 @@
                 <div class="text-center text-red-700">{{ company_totals.tasks_overdue }}</div>
                 <div class="text-center text-emerald-700">{{ company_totals.tasks_compliance }}%</div>
             </div>
-            {% if company_totals.unassigned %}
-                <div class="mt-2 bg-amber-50 border border-amber-200 text-amber-800 rounded px-3 py-2 text-xs flex items-center justify-between">
-                    <span>No user assigned to {{ company_totals.unassigned }} task{% if company_totals.unassigned != 1 %}s{% endif %} (excluded from metrics). Assign users to include them.</span>
-                    <button type="button" id="view-unassigned-footer" class="underline text-amber-800 hover:text-amber-900">View</button>
-                </div>
-            {% endif %}
+        {% endif %}
+        {% set warn_rows = company_summaries|selectattr('unassigned','gt',0)|list %}
+        {% if warn_rows|length > 0 %}
+            <div class="mt-2 bg-amber-50 border border-amber-200 text-amber-800 rounded px-3 py-2 text-xs space-y-1">
+                {% for row in warn_rows %}
+                    <div class="flex items-center justify-between">
+                        <span>No user assigned to {{ row.unassigned }} task{% if row.unassigned != 1 %}s{% endif %} for {{ row.name }} (excluded from metrics).</span>
+                        <button type="button" class="underline text-amber-800 hover:text-amber-900" onclick="document.getElementById('company-users-{{ row.company_id }}')?.classList.remove('hidden')">View</button>
+                    </div>
+                {% endfor %}
+            </div>
         {% endif %}
     </div>
 </div>
@@ -349,7 +352,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const impactLabels = {{ impact_counts|map(attribute='label')|list|tojson }};
         const completionData = [{{ task_counts.completed }}, {{ task_counts.pending }}, {{ task_counts.overdue }}];
         const completionLabels = ["Completed", "Pending", "Overdue"];
+    const metricMode = "{{ metric_mode }}";
     const allTasks = {{ tasks|tojson }};
+    const allUsers = {{ compliance|tojson }};
     const unassignedTasks = {{ unassigned_details|default([])|tojson }};
 
     const palette = ['#2563eb','#16a34a','#f59e0b','#ef4444','#8b5cf6','#0ea5e9'];
@@ -415,6 +420,96 @@ document.addEventListener('DOMContentLoaded', () => {
     const modalTitle = document.getElementById('task-modal-title');
     const modalClose = document.getElementById('task-modal-close');
         function showTasks(filter) {
+            if (metricMode === 'user') {
+                if (!modal || !modalContent) return;
+                let list = allUsers || [];
+                let titleText = 'User Summary';
+                if (typeof filter === 'string') {
+                    if (filter === 'completed') {
+                        list = list.filter(u => (u.pending_tasks || 0) === 0 && (u.total_tasks || 0) > 0);
+                        titleText = 'Users Complete';
+                    } else if (filter === 'pending') {
+                        list = list.filter(u => (u.pending_tasks || 0) > 0);
+                        titleText = 'Users Pending';
+                    } else if (filter === 'overdue') {
+                        list = list.filter(u => (u.overdue_tasks || 0) > 0);
+                        titleText = 'Users Overdue';
+                    } else {
+                        titleText = 'All Users';
+                    }
+                }
+                modalContent.innerHTML = '';
+                if (modalTitle) modalTitle.textContent = titleText;
+                const scrollWrap = document.createElement('div');
+                scrollWrap.className = 'overflow-x-auto';
+                const wrapper = document.createElement('div');
+                wrapper.className = 'space-y-2 text-sm min-w-[620px]';
+                const header = document.createElement('div');
+                header.className = 'grid grid-cols-[220px,120px,90px,90px,120px] gap-2 items-center bg-slate-100 px-3 py-2 rounded font-semibold text-slate-700 text-center';
+                header.innerHTML = `
+                    <div class="text-left">User</div>
+                    <div class="text-center">Completed / Total</div>
+                    <div class="text-center">Pending</div>
+                    <div class="text-center">Overdue</div>
+                    <div class="text-center">Status</div>
+                `;
+                wrapper.appendChild(header);
+                if (list.length) {
+                    let sumTotal = 0, sumCompleted = 0, sumPending = 0, sumOverdue = 0;
+                    let completeUsers = 0;
+                    list.forEach((u, idx) => {
+                        const total = u.total_tasks || 0;
+                        const completed = u.completed_tasks || 0;
+                        const pending = u.pending_tasks != null ? u.pending_tasks : Math.max(total - completed, 0);
+                        const overdue = u.overdue_tasks || 0;
+                        sumTotal += total;
+                        sumCompleted += completed;
+                        sumPending += pending;
+                        sumOverdue += overdue;
+                        if (pending === 0) completeUsers += 1;
+                        const row = document.createElement('div');
+                        const base = idx % 2 === 0 ? 'bg-slate-50' : 'bg-slate-100/60';
+                        row.className = `grid grid-cols-[220px,120px,90px,90px,120px] gap-2 items-center px-3 py-2 rounded text-center ${base}`;
+                        let statusHtml = '<span class="text-slate-700">No tasks</span>';
+                        if (overdue > 0) {
+                            statusHtml = '<span class="text-red-700 font-semibold">Overdue</span>';
+                        } else if (pending > 0) {
+                            statusHtml = '<span class="text-amber-700 font-semibold">Pending</span>';
+                        } else if (total > 0) {
+                            statusHtml = '<span class="text-green-700 font-semibold">Complete</span>';
+                        }
+                        const displayName = `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username || 'User';
+                        row.innerHTML = `
+                            <div class="text-left text-sm font-semibold text-slate-900 truncate">${displayName} (${u.username || ''})</div>
+                            <div class="text-center text-green-700">${completed}/${total}</div>
+                            <div class="text-center text-amber-700">${pending}</div>
+                            <div class="text-center text-red-700">${overdue}</div>
+                            <div class="text-center">${statusHtml}</div>
+                        `;
+                        wrapper.appendChild(row);
+                    });
+                    const totalsRow = document.createElement('div');
+                    totalsRow.className = 'grid grid-cols-[220px,120px,90px,90px,120px] gap-2 items-center px-3 py-2 rounded bg-slate-200 text-sm font-semibold text-slate-800 text-center';
+                    const userCompliancePct = list.length ? Math.round((completeUsers / list.length) * 1000) / 10 : 0;
+                    totalsRow.innerHTML = `
+                        <div class="text-left">Totals</div>
+                        <div>${sumCompleted}/${sumTotal}</div>
+                        <div>${sumPending}</div>
+                        <div>${sumOverdue}</div>
+                        <div>${completeUsers}/${list.length} (${userCompliancePct}%)</div>
+                    `;
+                    wrapper.appendChild(totalsRow);
+                } else {
+                    const p = document.createElement('p');
+                    p.className = 'text-sm text-slate-600 px-3 py-2';
+                    p.textContent = 'No users found for this category.';
+                    wrapper.appendChild(p);
+                }
+                scrollWrap.appendChild(wrapper);
+                modalContent.appendChild(scrollWrap);
+                modal.classList.remove('hidden');
+                return;
+            }
             if (!modal || !modalContent) return;
             let list = allTasks || [];
             let titleText = 'Task Summary';
@@ -457,6 +552,7 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
             wrapper.appendChild(header);
             if (list.length) {
+                let totalAssignSum = 0, totalDoneSum = 0, completedTasks = 0, overdueTasks = 0;
                 list.forEach((t, idx) => {
                     const base = idx % 2 === 0 ? 'bg-slate-50' : 'bg-slate-100/60';
                     const row = document.createElement('div');
@@ -465,15 +561,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     const totalAssign = t.assign_total || 0;
                     const done = t.assign_completed || 0;
                     const pct = t.completion_pct || 0;
+                    totalAssignSum += totalAssign;
+                    totalDoneSum += done;
+                    if (t.fully_completed) completedTasks += 1;
+                    if (t.overdue) overdueTasks += 1;
                     const flag = t.overdue
                         ? '<span class="text-red-700 font-semibold" data-label-id="modal-flag-overdue">Overdue</span>'
-                        : (t.fully_completed ? '<span class="text-green-700 font-semibold" data-label-id="modal-flag-completed">Completed</span>' : '<span class="text-slate-600" data-label-id="modal-flag-pending">Pending</span>');
+                        : (t.fully_completed ? '<span class="text-green-700 font-semibold" data-label-id="modal-flag-completed">Completed</span>' : '<span class="text-amber-700 font-semibold" data-label-id="modal-flag-pending">Pending</span>');
                     const companyLabel = t.company_label ? t.company_label : 'Global';
                     const companyDisplay = (companyLabel && companyLabel.toLowerCase() === 'global')
                         ? '<span class="font-semibold">Global</span>'
                         : companyLabel;
                     row.innerHTML = `
-                        <div class="text-left text-base font-semibold text-slate-900">${t.title || 'Untitled'}</div>
+                        <div class="text-left text-sm font-semibold text-slate-900 truncate">${t.title || 'Untitled'}</div>
                         <div class="text-center text-xs text-slate-700">${companyDisplay}</div>
                         <div class="text-center text-xs text-slate-700">${pct}%</div>
                         <div class="text-center text-xs text-slate-700">${done}/${totalAssign || 0}</div>
@@ -481,17 +581,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     `;
                     wrapper.appendChild(row);
                 });
+                const totalTasks = list.length;
+                const pendingTasks = Math.max(totalTasks - completedTasks, 0);
+                const avgPct = totalTasks ? Math.round((list.reduce((s, t) => s + (t.completion_pct || 0), 0) / totalTasks) * 10) / 10 : 0;
                 const totalsRow = document.createElement('div');
-                const avgPct = list.length ? Math.round(list.reduce((s, t) => s + (t.completion_pct || 0), 0) / list.length) : 0;
-                const totalAssignSum = list.reduce((s, t) => s + (t.assign_total || 0), 0);
-                const totalDoneSum = list.reduce((s, t) => s + (t.assign_completed || 0), 0);
                 totalsRow.className = 'grid grid-cols-[240px,120px,90px,140px,100px] gap-2 items-center px-3 py-2 rounded bg-slate-200 text-sm font-semibold text-slate-800 text-center';
                 totalsRow.innerHTML = `
-                    <div class="text-left"><span data-label-id="modal-row-average">Average / Totals</span></div>
-                    <div></div>
-                    <div>${avgPct}%</div>
+                    <div class="text-left">Totals</div>
+                    <div class="text-center">${totalTasks} tasks</div>
+                    <div>${avgPct}% avg</div>
                     <div>${totalDoneSum}/${totalAssignSum}</div>
-                    <div></div>
+                    <div>${completedTasks}/${totalTasks} complete</div>
                 `;
                 wrapper.appendChild(totalsRow);
             } else {
@@ -533,6 +633,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Unassigned tasks popup
     const unassignedBtn = document.getElementById('view-unassigned');
     const unassignedFooterBtn = document.getElementById('view-unassigned-footer');
+    // Auto-submit company filter on change
+    const companySelect = document.getElementById('companySelect');
+    const companyForm = document.getElementById('company-filter-form');
+    if (companySelect && companyForm) {
+        companySelect.addEventListener('change', () => companyForm.submit());
+    }
     const bindUnassigned = (btn) => {
         if (!btn) return;
         btn.addEventListener('click', (e) => {

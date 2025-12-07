@@ -103,6 +103,23 @@
                 <input type="checkbox" name="show_risk_matrix" {% if settings.show_risk_matrix %}checked{% endif %} class="h-4 w-4">
             </div>
         </div>
+        <div class="grid grid-cols-[1fr,180px] items-center px-3 py-2 rounded bg-slate-50 text-sm">
+            <div class="text-left">User Dashboard Charts (per role)</div>
+            <div class="text-center space-y-1">
+                <label class="flex items-center justify-start gap-2 text-xs text-slate-700">
+                    <input type="checkbox" name="show_user_charts_global" {% if settings.show_user_charts_global %}checked{% endif %} class="h-4 w-4">
+                    <span>Global Admin</span>
+                </label>
+                <label class="flex items-center justify-start gap-2 text-xs text-slate-700">
+                    <input type="checkbox" name="show_user_charts_company" {% if settings.show_user_charts_company %}checked{% endif %} class="h-4 w-4">
+                    <span>Company Admin</span>
+                </label>
+                <label class="flex items-center justify-start gap-2 text-xs text-slate-700">
+                    <input type="checkbox" name="show_user_charts_user" {% if settings.show_user_charts_user %}checked{% endif %} class="h-4 w-4">
+                    <span>User</span>
+                </label>
+            </div>
+        </div>
         <div class="flex items-center gap-2 pt-2 px-3">
             <button class="bg-blue-600 text-white px-4 py-2 rounded">Save</button>
         </div>

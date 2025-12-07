@@ -152,6 +152,9 @@ def create_tables_if_needed():
             show_task_charts INTEGER DEFAULT 1,
             show_risk_matrix INTEGER DEFAULT 1,
             show_user_banner INTEGER DEFAULT 1,
+            show_user_charts_global INTEGER DEFAULT 1,
+            show_user_charts_company INTEGER DEFAULT 1,
+            show_user_charts_user INTEGER DEFAULT 1,
             show_validation_notes INTEGER DEFAULT 1,
             severity_palette TEXT,
             impact_palette TEXT,
@@ -170,6 +173,12 @@ def create_tables_if_needed():
         cur.execute("ALTER TABLE app_settings ADD COLUMN show_risk_matrix INTEGER DEFAULT 1")
     if not _column_exists(cur, "app_settings", "show_user_banner"):
         cur.execute("ALTER TABLE app_settings ADD COLUMN show_user_banner INTEGER DEFAULT 1")
+    if not _column_exists(cur, "app_settings", "show_user_charts_global"):
+        cur.execute("ALTER TABLE app_settings ADD COLUMN show_user_charts_global INTEGER DEFAULT 1")
+    if not _column_exists(cur, "app_settings", "show_user_charts_company"):
+        cur.execute("ALTER TABLE app_settings ADD COLUMN show_user_charts_company INTEGER DEFAULT 1")
+    if not _column_exists(cur, "app_settings", "show_user_charts_user"):
+        cur.execute("ALTER TABLE app_settings ADD COLUMN show_user_charts_user INTEGER DEFAULT 1")
     if not _column_exists(cur, "app_settings", "show_validation_notes"):
         cur.execute("ALTER TABLE app_settings ADD COLUMN show_validation_notes INTEGER DEFAULT 1")
     if not _column_exists(cur, "app_settings", "severity_palette"):
@@ -190,8 +199,16 @@ def create_tables_if_needed():
     cur.execute("SELECT 1 FROM app_settings WHERE id=1")
     if cur.fetchone() is None:
         cur.execute("""
-            INSERT INTO app_settings (id, version, show_version, show_page_name, show_module_tree, show_cut_icon, show_label_edit, show_task_charts, show_risk_matrix, show_user_banner, show_validation_notes, severity_palette, impact_palette, completion_palette)
-            VALUES (1, '', 0, 0, 0, 0, 0, 1, 1, 1, 1, '', '', '')
+            INSERT INTO app_settings (id, version, show_version, show_page_name, show_module_tree, show_cut_icon, show_label_edit, show_task_charts, show_risk_matrix, show_user_banner, show_user_charts_global, show_user_charts_company, show_user_charts_user, show_validation_notes, severity_palette, impact_palette, completion_palette)
+            VALUES (1, '', 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, '', '', '')
+        """)
+    else:
+        cur.execute("""
+            UPDATE app_settings
+            SET show_user_charts_global = COALESCE(show_user_charts_global, 1),
+                show_user_charts_company = COALESCE(show_user_charts_company, 1),
+                show_user_charts_user = COALESCE(show_user_charts_user, 1)
+            WHERE id = 1
         """)
     # Seed default task field descriptions
     defaults = {
@@ -542,13 +559,13 @@ def admin_get_app_settings():
 
 
 # Admin: update app settings
-def admin_update_app_settings(version, show_version, show_page_name, show_module_tree, show_cut_icon, show_label_edit, show_task_charts, show_risk_matrix, show_user_banner, show_validation_notes):
+def admin_update_app_settings(version, show_version, show_page_name, show_module_tree, show_cut_icon, show_label_edit, show_task_charts, show_risk_matrix, show_user_banner, show_user_charts_global, show_user_charts_company, show_user_charts_user, show_validation_notes):
     """Persist the main app setting flags and version string."""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("""
         UPDATE app_settings
-        SET version=?, show_version=?, show_page_name=?, show_module_tree=?, show_cut_icon=?, show_label_edit=?, show_task_charts=?, show_risk_matrix=?, show_user_banner=?, show_validation_notes=?
+        SET version=?, show_version=?, show_page_name=?, show_module_tree=?, show_cut_icon=?, show_label_edit=?, show_task_charts=?, show_risk_matrix=?, show_user_banner=?, show_user_charts_global=?, show_user_charts_company=?, show_user_charts_user=?, show_validation_notes=?
         WHERE id=1
     """, (
         version,
@@ -560,6 +577,9 @@ def admin_update_app_settings(version, show_version, show_page_name, show_module
         1 if show_task_charts else 0,
         1 if show_risk_matrix else 0,
         1 if show_user_banner else 0,
+        1 if show_user_charts_global else 0,
+        1 if show_user_charts_company else 0,
+        1 if show_user_charts_user else 0,
         1 if show_validation_notes else 0,
     ))
     conn.commit()
@@ -1205,6 +1225,12 @@ def admin_update_company(company_id, name, admin_user_id=None, address1=None, ad
     conn = get_connection()
     cur = conn.cursor()
     try:
+        # Prevent inactivating a company that still has active users
+        if not is_active:
+            cur.execute("SELECT COUNT(*) FROM users WHERE company_id=? AND COALESCE(is_active,1)=1", (company_id,))
+            active_users = cur.fetchone()[0]
+            if active_users > 0:
+                return "Cannot deactivate a company while it has active users."
         cur.execute("""
             UPDATE companies
             SET name=?, company_admin_id=?, address_line1=?, address_line2=?, address_line3=?, state=?, postcode=?, is_active=?

@@ -15,17 +15,22 @@
         </form>
     </div>
     <div class="p-4 space-y-2 text-sm">
-        <div class="tbl-header text-sm grid grid-cols-[70px,1fr,120px,120px] gap-2 items-center">
+        <div class="tbl-header text-sm grid grid-cols-[70px,1fr,120px,120px,120px] gap-2 items-center">
             <div class="text-center">ID</div>
             <div class="text-left">Name</div>
+            <div class="text-center">Employees (Active/Inactive)</div>
             <div class="text-center">Active</div>
             <div class="text-center">Action</div>
         </div>
         {% if companies %}
             {% for c in companies %}
-                <div class="grid grid-cols-[70px,1fr,120px,120px] gap-2 items-center tbl-row {% if loop.index0 % 2 == 0 %}tbl-row-bg{% else %}tbl-row-alt{% endif %}">
+                <div class="grid grid-cols-[70px,1fr,120px,120px,120px] gap-2 items-center tbl-row {% if loop.index0 % 2 == 0 %}tbl-row-bg{% else %}tbl-row-alt{% endif %} cursor-pointer" data-company-select="{{ c.id }}">
                     <div class="text-center text-xs text-slate-600">{{ c.id }}</div>
-                    <div class="text-left truncate">{{ c.name }}</div>
+                    <div class="text-left truncate text-slate-800 font-semibold">{{ c.name }}</div>
+                    {% set active = active_user_counts.get(c.id, 0) %}
+                    {% set total = total_user_counts.get(c.id, 0) %}
+                    {% set inactive = total - active %}
+                    <div class="text-center text-xs">{{ active }}/{{ inactive }}</div>
                     <div class="text-center text-xs">
                         {% if c.is_active %}<span class="text-green-700 font-semibold">Active</span>{% else %}<span class="text-slate-500">Inactive</span>{% endif %}
                     </div>
@@ -57,7 +62,7 @@
         <input type="hidden" name="company_id" value="{{ selected_company.id if selected_company }}">
         <div class="grid grid-cols-[160px,1fr] items-center px-3 py-2 rounded bg-slate-50">
             <div class="text-left font-medium">Company name</div>
-            <input name="name" value="{{ selected_company.name if selected_company }}" class="w-full border p-2 rounded text-sm" required>
+            <input name="name" value="{{ selected_company.name if selected_company }}" class="w-full border p-2 rounded text-sm" required placeholder="Required">
         </div>
         {% if selected_company %}
         <div class="grid grid-cols-[160px,1fr] items-center px-3 py-2 rounded bg-slate-100/60">
@@ -89,17 +94,19 @@
             <div class="text-left font-medium">Address Line 3</div>
             <input name="address3" value="{{ selected_company.address_line3 if selected_company }}" class="w-full border p-2 rounded text-sm">
         </div>
-        <div class="grid grid-cols-[160px,1fr] items-center px-3 py-2 rounded bg-slate-100/60">
-            <div class="text-left font-medium">State</div>
-            <input name="state" value="{{ selected_company.state if selected_company }}" class="w-full border p-2 rounded text-sm">
+        <div class="grid grid-cols-2 gap-3 items-center px-3 py-2 rounded bg-slate-100/60">
+            <div class="flex items-center space-x-2">
+                <span class="text-left font-medium w-24">State</span>
+                <input name="state" value="{{ selected_company.state if selected_company }}" class="w-full border p-2 rounded text-sm">
+            </div>
+            <div class="flex items-center space-x-2">
+                <span class="text-left font-medium w-24">Postcode</span>
+                <input name="postcode" value="{{ selected_company.postcode if selected_company }}" class="w-full border p-2 rounded text-sm">
+            </div>
         </div>
-        <div class="grid grid-cols-[160px,1fr] items-center px-3 py-2 rounded bg-slate-50">
-            <div class="text-left font-medium">Postcode</div>
-            <input name="postcode" value="{{ selected_company.postcode if selected_company }}" class="w-full border p-2 rounded text-sm">
-        </div>
-        <div class="flex items-center justify-start gap-2 px-3 pt-2">
-            <button id="company-submit-btn" class="bg-blue-600 text-white px-4 py-2 rounded min-w-[140px]">{{ selected_company and 'Update Company' or 'Add Company' }}</button>
+        <div class="flex items-center justify-end gap-2 px-3 pt-2">
             <button type="button" id="new-company-btn" class="bg-slate-200 text-slate-700 px-4 py-2 rounded text-sm min-w-[100px]">New Company</button>
+            <button id="company-submit-btn" class="bg-blue-600 text-white px-4 py-2 rounded min-w-[140px]">{{ selected_company and 'Update Company' or 'Add Company' }}</button>
         </div>
     </form>
 </div>
@@ -108,10 +115,16 @@
     const companyForm = document.getElementById('company-form');
     const newCompanyBtn = document.getElementById('new-company-btn');
     const submitCompanyBtn = document.getElementById('company-submit-btn');
+    document.querySelectorAll('[data-company-select]').forEach(row => {
+        row.addEventListener('click', () => {
+            const id = row.getAttribute('data-company-select');
+            if (id) window.location.href = `/admin/companies?company_id=${id}`;
+        });
+    });
     if (companyForm && newCompanyBtn) {
         newCompanyBtn.addEventListener('click', () => {
             companyForm.reset();
-            const hidden = companyForm.querySelector('input[name=\"company_id\"]');
+            const hidden = companyForm.querySelector('input[name="company_id"]');
             if (hidden) hidden.value = '';
             if (submitCompanyBtn) submitCompanyBtn.textContent = 'Add Company';
         });
