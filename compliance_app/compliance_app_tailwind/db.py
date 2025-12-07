@@ -148,6 +148,7 @@ def create_tables_if_needed():
             show_label_edit INTEGER DEFAULT 0,
             show_task_charts INTEGER DEFAULT 1,
             show_risk_matrix INTEGER DEFAULT 1,
+            show_user_banner INTEGER DEFAULT 1,
             severity_palette TEXT,
             impact_palette TEXT,
             completion_palette TEXT
@@ -163,6 +164,8 @@ def create_tables_if_needed():
         cur.execute("ALTER TABLE app_settings ADD COLUMN show_task_charts INTEGER DEFAULT 1")
     if not _column_exists(cur, "app_settings", "show_risk_matrix"):
         cur.execute("ALTER TABLE app_settings ADD COLUMN show_risk_matrix INTEGER DEFAULT 1")
+    if not _column_exists(cur, "app_settings", "show_user_banner"):
+        cur.execute("ALTER TABLE app_settings ADD COLUMN show_user_banner INTEGER DEFAULT 1")
     if not _column_exists(cur, "app_settings", "severity_palette"):
         cur.execute("ALTER TABLE app_settings ADD COLUMN severity_palette TEXT")
     if not _column_exists(cur, "app_settings", "impact_palette"):
@@ -181,8 +184,8 @@ def create_tables_if_needed():
     cur.execute("SELECT 1 FROM app_settings WHERE id=1")
     if cur.fetchone() is None:
         cur.execute("""
-            INSERT INTO app_settings (id, version, show_version, show_page_name, show_module_tree, show_cut_icon, show_label_edit, show_task_charts, show_risk_matrix, severity_palette, impact_palette, completion_palette)
-            VALUES (1, '', 0, 0, 0, 0, 0, 1, 1, '', '', '')
+            INSERT INTO app_settings (id, version, show_version, show_page_name, show_module_tree, show_cut_icon, show_label_edit, show_task_charts, show_risk_matrix, show_user_banner, severity_palette, impact_palette, completion_palette)
+            VALUES (1, '', 0, 0, 0, 0, 0, 1, 1, 1, '', '', '')
         """)
     # Seed default task field descriptions
     defaults = {
@@ -533,13 +536,13 @@ def admin_get_app_settings():
 
 
 # Admin: update app settings
-def admin_update_app_settings(version, show_version, show_page_name, show_module_tree, show_cut_icon, show_label_edit, show_task_charts, show_risk_matrix):
+def admin_update_app_settings(version, show_version, show_page_name, show_module_tree, show_cut_icon, show_label_edit, show_task_charts, show_risk_matrix, show_user_banner):
     """Persist the main app setting flags and version string."""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("""
         UPDATE app_settings
-        SET version=?, show_version=?, show_page_name=?, show_module_tree=?, show_cut_icon=?, show_label_edit=?, show_task_charts=?, show_risk_matrix=?
+        SET version=?, show_version=?, show_page_name=?, show_module_tree=?, show_cut_icon=?, show_label_edit=?, show_task_charts=?, show_risk_matrix=?, show_user_banner=?
         WHERE id=1
     """, (
         version,
@@ -550,6 +553,7 @@ def admin_update_app_settings(version, show_version, show_page_name, show_module
         1 if show_label_edit else 0,
         1 if show_task_charts else 0,
         1 if show_risk_matrix else 0,
+        1 if show_user_banner else 0,
     ))
     conn.commit()
     conn.close()

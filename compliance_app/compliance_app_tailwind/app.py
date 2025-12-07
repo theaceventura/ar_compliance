@@ -22,6 +22,17 @@ db.create_tables_if_needed()
 def inject_app_settings():
     """Make app settings available to every template render."""
     settings = db.admin_get_app_settings()
+    # Build a lightweight banner object for templates if a user is logged in
+    banner = None
+    if "user_id" in session:
+        user_row = db.admin_get_user(session["user_id"])
+        if user_row:
+            display_name = f"{user_row['first_name'] or ''} {user_row['last_name'] or ''}".strip() or user_row["username"]
+            banner = {
+                "display_name": display_name,
+                "role": user_row["role"],
+                "role_label": None,  # filled below via role_label
+            }
     def role_label(role):
         mapping = {
             "admin": "Global Admin",
@@ -29,7 +40,9 @@ def inject_app_settings():
             "user": "User",
         }
         return mapping.get(role, role)
-    return {"app_settings": settings, "role_label": role_label}
+    if banner:
+        banner["role_label"] = role_label(banner["role"])
+    return {"app_settings": settings, "role_label": role_label, "current_user_banner": banner}
 
 
 # Helper to read the current logged-in user from session
@@ -1409,6 +1422,7 @@ def admin_app_settings():
     show_label_edit = request.form.get("show_label_edit") == "on"
     show_task_charts = request.form.get("show_task_charts") == "on"
     show_risk_matrix = request.form.get("show_risk_matrix") == "on"
+    show_user_banner = request.form.get("show_user_banner") == "on"
     db.admin_update_app_settings(
         version,
         show_version,
@@ -1418,6 +1432,7 @@ def admin_app_settings():
         show_label_edit,
         show_task_charts,
         show_risk_matrix,
+        show_user_banner,
     )
     flash("Settings updated.")
     return redirect(url_for("admin_app_settings"))
