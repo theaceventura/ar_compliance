@@ -43,6 +43,7 @@ def create_tables_if_needed():
             username TEXT UNIQUE,
             password TEXT,
             role TEXT,
+            is_global_admin INTEGER DEFAULT 0,
             first_name TEXT,
             last_name TEXT,
             email TEXT,
@@ -108,6 +109,8 @@ def create_tables_if_needed():
         cur.execute("ALTER TABLE users ADD COLUMN send_notifications INTEGER DEFAULT 0")
     if not _column_exists(cur, "users", "is_active"):
         cur.execute("ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1")
+    if not _column_exists(cur, "users", "is_global_admin"):
+        cur.execute("ALTER TABLE users ADD COLUMN is_global_admin INTEGER DEFAULT 0")
     if not _column_exists(cur, "users", "company_id"):
         cur.execute("ALTER TABLE users ADD COLUMN company_id INTEGER")
         cur.execute("UPDATE users SET company_id=1 WHERE company_id IS NULL")
@@ -208,10 +211,15 @@ def create_tables_if_needed():
 
     # Create admin if not exists
     cur.execute("SELECT * FROM users WHERE username='admin'")
-    if cur.fetchone() is None:
+    admin_row = cur.fetchone()
+    if admin_row is None:
         cur.execute(
             "INSERT INTO users (username,password,role,first_name,last_name,email,mobile,send_notifications,company_id) VALUES ('admin','secret','admin','','','','',0,1)"
         )
+        cur.execute("UPDATE users SET is_global_admin=1 WHERE username='admin'")
+    else:
+        # Ensure existing admin is flagged as global admin
+        cur.execute("UPDATE users SET is_global_admin=1 WHERE username='admin'")
 
     # Seed default options
     cur.execute("SELECT COUNT(*) FROM impact_options WHERE company_id=1")
@@ -707,6 +715,7 @@ def admin_user_compliance(company_id):
             LEFT JOIN tasks ON tasks.id = user_tasks.task_id
             WHERE (tasks.company_id = users.company_id OR tasks.company_id IS NULL)
               AND LOWER(users.role) NOT IN ('admin', 'global admin')
+              AND COALESCE(users.is_global_admin,0)=0
             GROUP BY users.id, users.username, users.role, users.first_name, users.last_name
             ORDER BY users.username
         """)
@@ -725,6 +734,7 @@ def admin_user_compliance(company_id):
             LEFT JOIN tasks ON tasks.id = user_tasks.task_id
             WHERE users.company_id=?
               AND LOWER(users.role) NOT IN ('admin', 'global admin')
+              AND COALESCE(users.is_global_admin,0)=0
               AND (tasks.company_id = users.company_id OR tasks.company_id IS NULL)
             GROUP BY users.id, users.username, users.role, users.first_name, users.last_name
             ORDER BY users.username
