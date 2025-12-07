@@ -82,16 +82,17 @@
             <a href="/admin/users" class="text-blue-600 hover:underline">User Admin</a>
         </div>
     </div>
-    <div class="p-3 space-y-2 text-sm">
-        <div class="tbl-header text-sm grid grid-cols-[180px,160px,120px,120px,100px,90px] gap-2 items-center">
-            <div class="text-left"><span data-label-id="user-table-name">Name</span></div>
-            <div class="text-left"><span data-label-id="user-table-username">Username</span></div>
-            <div class="text-center"><span data-label-id="user-table-role">Role</span></div>
+        <div class="p-3 space-y-2 text-sm">
+            <div class="tbl-header text-sm grid grid-cols-[180px,160px,120px,120px,100px,90px] gap-2 items-center">
+                <div class="text-left"><span data-label-id="user-table-name">Name</span></div>
+                <div class="text-left"><span data-label-id="user-table-username">Username</span></div>
+                <div class="text-center"><span data-label-id="user-table-role">Role</span></div>
             <div class="text-center"><span data-label-id="user-table-completed">Completed / Total</span></div>
             <div class="text-center"><span data-label-id="user-table-status">Status</span></div>
             <div class="text-center"><span data-label-id="user-table-report">Report</span></div>
         </div>
         {% if compliance %}
+        <div id="user-rows" class="space-y-1">
         {% for row in compliance %}
             {% set total = row.total_tasks or 0 %}
             {% set completed = row.completed_tasks or 0 %}
@@ -133,6 +134,14 @@
                 </div>
             </div>
         {% endfor %}
+        </div>
+        <div class="flex items-center justify-between text-xs text-slate-600 mt-2">
+            <div id="user-table-status"></div>
+            <div class="space-x-2">
+                <button type="button" id="user-table-show-more" class="px-2 py-1 border rounded bg-white hover:bg-slate-50">Show more</button>
+                <button type="button" id="user-table-show-all" class="px-2 py-1 border rounded bg-white hover:bg-slate-50">Show all</button>
+            </div>
+        </div>
         {% else %}
             <div class="tbl-empty text-sm">No users to display.</div>
         {% endif %}
@@ -154,38 +163,66 @@
 </div>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
-        // User metric filters -> filter table rows
-        const metricButtons = document.querySelectorAll('[data-user-filter]');
-        const userRows = Array.from(document.querySelectorAll('.user-status-row'));
-        const statusSection = document.getElementById('user-status');
-        // Limit visible rows to 5 by default
-        const defaultLimit = 5;
-        userRows.forEach((row, idx) => {
-            if (idx >= defaultLimit) {
+    // User metric filters -> filter table rows
+    const metricButtons = document.querySelectorAll('[data-user-filter]');
+    const userRows = Array.from(document.querySelectorAll('.user-status-row'));
+    const statusSection = document.getElementById('user-status');
+    const defaultLimit = 5;
+    let currentLimit = defaultLimit;
+
+    function applyLimit(limit) {
+        let visibleCount = 0;
+        userRows.forEach(row => {
+            if (!row.classList.contains('filtered-out')) {
+                row.classList.toggle('hidden', visibleCount >= limit);
+                if (!row.classList.contains('hidden')) visibleCount += 1;
+            } else {
                 row.classList.add('hidden');
             }
         });
-        function applyUserFilter(mode) {
-            userRows.forEach((row, idx) => {
-                const pending = parseInt(row.dataset.pending || '0', 10);
-                const overdue = parseInt(row.dataset.overdue || '0', 10);
-                let show = true;
-                if (mode === 'complete') {
-                    show = pending === 0 && overdue === 0;
-                } else if (mode === 'pending') {
-                    show = pending > 0;
-                } else if (mode === 'overdue') {
-                    show = overdue > 0;
-                }
-                // Preserve default limit for any filter: show matches but keep only first 5 visible
-                if (show) {
-                    row.classList.toggle('hidden', idx >= defaultLimit);
-                } else {
-                    row.classList.add('hidden');
-                }
-            });
-            statusSection?.scrollIntoView({ behavior: 'smooth' });
+        const status = document.getElementById('user-table-status');
+        if (status) {
+            const showing = Math.min(visibleCount, limit);
+            status.textContent = `Showing up to ${showing} of ${userRows.length}`;
         }
+    }
+
+    // Initial limit
+    applyLimit(currentLimit);
+
+    const showMoreBtn = document.getElementById('user-table-show-more');
+    const showAllBtn = document.getElementById('user-table-show-all');
+    if (showMoreBtn) {
+        showMoreBtn.addEventListener('click', () => {
+            currentLimit += defaultLimit;
+            applyLimit(currentLimit);
+        });
+    }
+    if (showAllBtn) {
+        showAllBtn.addEventListener('click', () => {
+            currentLimit = userRows.length;
+            applyLimit(currentLimit);
+        });
+    }
+
+    function applyUserFilter(mode) {
+        userRows.forEach((row) => {
+            const pending = parseInt(row.dataset.pending || '0', 10);
+            const overdue = parseInt(row.dataset.overdue || '0', 10);
+            let show = true;
+            if (mode === 'complete') {
+                show = pending === 0 && overdue === 0;
+            } else if (mode === 'pending') {
+                show = pending > 0;
+            } else if (mode === 'overdue') {
+                show = overdue > 0;
+            }
+            row.classList.toggle('filtered-out', !show);
+        });
+        currentLimit = defaultLimit;
+        applyLimit(currentLimit);
+        statusSection?.scrollIntoView({ behavior: 'smooth' });
+    }
     metricButtons.forEach(btn => {
         btn.addEventListener('click', () => applyUserFilter(btn.dataset.userFilter || 'all'));
     });
