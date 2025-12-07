@@ -34,37 +34,86 @@
 </div>
 
 <div class="bg-white shadow rounded relative mb-4" data-widget-id="admin-dashboard-metrics">
-    <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700"><span data-label-id="heading-task-metrics">Task Metrics</span></div>
+    <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700 flex items-center justify-between">
+        <span data-label-id="heading-task-metrics">Task Metrics</span>
+        <div class="flex items-center space-x-2 text-xs text-slate-600">
+            <span>Mode:</span>
+            <a href="?metric_mode=task" class="px-2 py-1 rounded border {{ 'bg-blue-600 text-white border-blue-600' if metric_mode=='task' else 'border-slate-200' }}">Tasks</a>
+            <a href="?metric_mode=user" class="px-2 py-1 rounded border {{ 'bg-blue-600 text-white border-blue-600' if metric_mode=='user' else 'border-slate-200' }}">Users</a>
+        </div>
+    </div>
     <div class="grid grid-cols-1 md:grid-cols-5 gap-3 p-2">
         <button type="button" data-metric-target="charts" class="bg-slate-50 border border-slate-100 p-3 rounded text-center hover:border-blue-300 hover:shadow focus:outline-none focus:ring" data-summary="all">
             <div class="text-sm text-slate-500 flex items-center justify-center gap-1">
                 <span id="label-task-total" data-label-id="label-task-total">Total Tasks</span>
             </div>
-            <div class="text-2xl font-semibold">{{ task_counts.total }}</div>
+            <div class="text-2xl font-semibold">
+                {% if metric_mode == 'user' %}
+                    {{ user_counts.total }}
+                {% else %}
+                    {{ task_counts.total }}
+                {% endif %}
+            </div>
+            {% if metric_mode == 'task' %}
+            <div class="text-xs text-slate-500">Assignments: {{ assignment_counts.total }}</div>
+            {% endif %}
         </button>
         <button type="button" data-metric-target="completion-card" class="bg-slate-50 border border-slate-100 p-3 rounded text-center hover:border-blue-300 hover:shadow focus:outline-none focus:ring" data-summary="completed">
             <div class="text-sm text-slate-500 flex items-center justify-center gap-1">
                 <span id="label-task-completed" data-label-id="label-task-completed">Completed</span>
             </div>
-            <div class="text-2xl font-semibold text-green-700">{{ task_counts.completed }} / {{ task_counts.total }}</div>
+            <div class="text-2xl font-semibold text-green-700">
+                {% if metric_mode == 'user' %}
+                    {{ user_counts.completed }} / {{ user_counts.total }}
+                {% else %}
+                    {{ task_counts.completed }} / {{ task_counts.total }}
+                {% endif %}
+            </div>
+            {% if metric_mode == 'task' %}
+            <div class="text-xs text-green-700">Assignments: {{ assignment_counts.completed }} / {{ assignment_counts.total }}</div>
+            {% endif %}
         </button>
         <button type="button" data-metric-target="completion-card" class="bg-slate-50 border border-slate-100 p-3 rounded text-center hover:border-blue-300 hover:shadow focus:outline-none focus:ring" data-summary="pending">
             <div class="text-sm text-slate-500 flex items-center justify-center gap-1">
                 <span id="label-task-pending" data-label-id="label-task-pending">Pending</span>
             </div>
-            <div class="text-2xl font-semibold text-amber-700">{{ task_counts.pending }} / {{ task_counts.total }}</div>
+            <div class="text-2xl font-semibold text-amber-700">
+                {% if metric_mode == 'user' %}
+                    {{ user_counts.pending }} / {{ user_counts.total }}
+                {% else %}
+                    {{ task_counts.pending }} / {{ task_counts.total }}
+                {% endif %}
+            </div>
+            {% if metric_mode == 'task' %}
+            <div class="text-xs text-amber-700">Assignments: {{ assignment_counts.pending }} / {{ assignment_counts.total }}</div>
+            {% endif %}
         </button>
         <button type="button" data-metric-target="completion-card" class="bg-slate-50 border border-slate-100 p-3 rounded text-center hover:border-blue-300 hover:shadow focus:outline-none focus:ring" data-summary="overdue">
             <div class="text-sm text-slate-500 flex items-center justify-center gap-1">
                 <span id="label-task-overdue" data-label-id="label-task-overdue">Overdue</span>
             </div>
-            <div class="text-2xl font-semibold text-red-700">{{ task_counts.overdue }} / {{ task_counts.total }}</div>
+            <div class="text-2xl font-semibold text-red-700">
+                {% if metric_mode == 'user' %}
+                    {{ user_counts.overdue }} / {{ user_counts.total }}
+                {% else %}
+                    {{ task_counts.overdue }} / {{ task_counts.total }}
+                {% endif %}
+            </div>
+            {% if metric_mode == 'task' %}
+            <div class="text-xs text-red-700">Assignments: {{ assignment_counts.overdue }} / {{ assignment_counts.total }}</div>
+            {% endif %}
         </button>
         <button type="button" data-metric-target="user-status" class="bg-slate-50 border border-slate-100 p-3 rounded text-center hover:border-blue-300 hover:shadow focus:outline-none focus:ring" data-summary="all">
             <div class="text-sm text-slate-500 flex items-center justify-center gap-1">
                 <span id="label-task-compliance" data-label-id="label-task-compliance">Compliance</span>
             </div>
-            <div class="text-2xl font-semibold text-emerald-700">{{ compliance_percent }}%</div>
+            <div class="text-2xl font-semibold text-emerald-700">
+                {% if metric_mode == 'user' %}
+                    {{ user_counts.compliance }}%
+                {% else %}
+                    {{ compliance_percent }}%
+                {% endif %}
+            </div>
         </button>
     </div>
     <div class="px-3 pb-3">
@@ -72,15 +121,114 @@
             Task metrics are task-based: Completed counts tasks where every assigned user finished; Pending is total minus completed; Overdue counts tasks past due; Compliance is completed tasks divided by total tasks.
         </div>
         {% if unassigned_tasks %}
-        <div class="bg-amber-50 border border-amber-200 text-amber-800 rounded p-2 text-xs mt-2">
-            {{ unassigned_tasks }} task{% if unassigned_tasks != 1 %}s{% endif %} have no users assigned. Assign users to ensure accurate completion tracking.
+        <div class="bg-amber-50 border border-amber-200 text-amber-800 rounded p-2 text-xs mt-2 flex items-center justify-between">
+            <span>No user assigned to {{ unassigned_tasks }} task{% if unassigned_tasks != 1 %}s{% endif %} (excluded from metrics). Assign users to include them.</span>
+            <button type="button" id="view-unassigned" class="underline text-amber-800 hover:text-amber-900">View</button>
         </div>
         {% endif %}
     </div>
 </div>
 
+<div class="bg-white shadow rounded relative mb-4" data-widget-id="admin-dashboard-company-table">
+    <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Company Task Summary</div>
+    <div class="p-3 space-y-2 text-sm">
+        <div class="text-xs text-slate-500">Companies loaded: {{ company_summaries|length }}</div>
+        {% if company_summaries and company_summaries|length > 0 %}
+            <div class="text-xs text-slate-500">Loaded companies: {{ company_summaries | map(attribute='name') | list | join(', ') }}</div>
+        {% endif %}
+        <div class="tbl-header text-sm grid grid-cols-[2.3fr,0.7fr,0.95fr,0.95fr,0.95fr,0.95fr,1fr] gap-2 items-center">
+            <div class="text-left">Company</div>
+            <div class="text-center">Users</div>
+            <div class="text-center">Total</div>
+            <div class="text-center">Completed</div>
+            <div class="text-center">Pending</div>
+            <div class="text-center">Overdue</div>
+            <div class="text-center">Compliance %</div>
+        </div>
+        {% for row in company_summaries %}
+            {% set warn = row.unassigned and row.unassigned > 0 %}
+            <div class="tbl-row text-sm grid grid-cols-[2.3fr,0.7fr,0.95fr,0.95fr,0.95fr,0.95fr,1fr] gap-2 items-center {% if loop.index0 % 2 == 1 %}tbl-row-alt{% endif %} {{ 'bg-amber-50 border border-amber-200' if warn else '' }} cursor-pointer" data-company-row data-company-id="{{ row.company_id }}">
+                <div class="text-left font-semibold text-slate-800 truncate text-blue-700">
+                    {{ row.name }}
+                    {% if warn %}
+                        <div class="inline-flex items-center mt-1 bg-amber-100 text-amber-800 border border-amber-200 rounded px-2 py-1 text-[11px] font-semibold">
+                            No user assigned to {{ row.unassigned }} task{% if row.unassigned != 1 %}s{% endif %} (excluded)
+                        </div>
+                    {% endif %}
+                </div>
+                <div class="text-center font-semibold text-slate-800">{{ row.user_count }}</div>
+                <div class="text-center">{{ row.tasks_total }}</div>
+                <div class="text-center text-green-700">{{ row.tasks_completed }}</div>
+                <div class="text-center text-amber-700">{{ row.tasks_pending }}</div>
+                <div class="text-center text-red-700">{{ row.tasks_overdue }}</div>
+                <div class="text-center text-emerald-700 font-semibold">{{ row.tasks_compliance }}%</div>
+            </div>
+            {% set users_for_company = company_user_rows.get(row.company_id) or company_user_rows.get(row.company_id|string) or [] %}
+            <div id="company-users-{{ row.company_id }}" class="hidden border border-slate-200 rounded px-3 py-2 bg-slate-50 text-sm space-y-1">
+                {% if users_for_company and users_for_company|length > 0 %}
+                    <div class="tbl-header text-xs grid grid-cols-[1.4fr,1fr,1fr,1fr,1fr] gap-2 items-center">
+                        <div class="text-left">User</div>
+                        <div class="text-center">Completed/Total</div>
+                        <div class="text-center">Pending</div>
+                        <div class="text-center">Overdue</div>
+                        <div class="text-center">Status</div>
+                    </div>
+                    {% for u in users_for_company %}
+                        {% set total = u.total_tasks or 0 %}
+                        {% set completed = u.completed_tasks or 0 %}
+                        {% set pending = (u.pending_tasks or (total - completed)) %}
+                        {% set overdue = u.overdue_tasks or 0 %}
+                        {% set row_class = loop.index0 % 2 == 1 and 'tbl-row-alt' or '' %}
+                        <div class="tbl-row text-xs grid grid-cols-[1.4fr,1fr,1fr,1fr,1fr] gap-2 items-center {{ row_class }}">
+                            <div class="text-left truncate">{{ u.first_name or '' }} {{ u.last_name or '' }} ({{ u.username }})</div>
+                            <div class="text-center text-green-700">{{ completed }}/{{ total }}</div>
+                            <div class="text-center text-amber-700">{{ pending }}</div>
+                            <div class="text-center text-red-700">{{ overdue }}</div>
+                            <div class="text-center">
+                                {% if overdue > 0 %}
+                                    <span class="text-red-700 font-semibold">Overdue</span>
+                                {% elif pending > 0 %}
+                                    <span class="text-amber-700 font-semibold">Pending</span>
+                                {% else %}
+                                    <span class="text-green-700 font-semibold">Complete</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="text-xs text-slate-600">No users.</div>
+                {% endif %}
+            </div>
+        {% endfor %}
+        {% if company_summaries|length == 0 %}
+            <div class="tbl-empty text-sm">No companies to display.</div>
+        {% endif %}
+        {% if company_totals %}
+            <div class="tbl-row text-sm grid grid-cols-[2.3fr,0.7fr,0.95fr,0.95fr,0.95fr,0.95fr,1fr] gap-2 items-center bg-slate-200 font-semibold text-slate-900">
+                <div class="text-left">Total</div>
+                <div class="text-center">{{ company_totals.user_count }}</div>
+                <div class="text-center">{{ company_totals.tasks_total }}</div>
+                <div class="text-center text-green-700">{{ company_totals.tasks_completed }}</div>
+                <div class="text-center text-amber-700">{{ company_totals.tasks_pending }}</div>
+                <div class="text-center text-red-700">{{ company_totals.tasks_overdue }}</div>
+                <div class="text-center text-emerald-700">{{ company_totals.tasks_compliance }}%</div>
+            </div>
+            {% if company_totals.unassigned %}
+                <div class="mt-2 bg-amber-50 border border-amber-200 text-amber-800 rounded px-3 py-2 text-xs flex items-center justify-between">
+                    <span>No user assigned to {{ company_totals.unassigned }} task{% if company_totals.unassigned != 1 %}s{% endif %} (excluded from metrics). Assign users to include them.</span>
+                    <button type="button" id="view-unassigned-footer" class="underline text-amber-800 hover:text-amber-900">View</button>
+                </div>
+            {% endif %}
+        {% endif %}
+    </div>
+</div>
+
+{% set show_charts = (app_settings.show_task_charts if app_settings is not none else 1) %}
+{% set show_matrix = (app_settings.show_risk_matrix if app_settings is not none else 1) %}
+
+{% if show_charts %}
 <div class="bg-white shadow rounded relative mt-4" data-widget-id="admin-dashboard-charts">
-    <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700"><span data-label-id="heading-charts">Charts</span></div>
+    <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700"><span data-label-id="heading-charts">Task Risk Charts</span></div>
     <div class="p-3">
         <div id="charts" class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
             <div id="severity-card" class="bg-slate-50 border border-slate-100 p-3 rounded">
@@ -116,10 +264,12 @@
         </div>
     </div>
 </div>
+{% endif %}
 
+{% if show_matrix %}
 <div class="mt-4 bg-white shadow rounded relative" data-widget-id="admin-dashboard-risk-matrix">
     <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700 flex items-center justify-between">
-        <span data-label-id="heading-risk-matrix">Risk Matrix (Severity × Impact)</span>
+        <span data-label-id="heading-risk-matrix">Task Risk Matrix (Severity × Impact)</span>
     </div>
     <div class="p-3 overflow-x-auto">
         <style>
@@ -129,7 +279,6 @@
             .risk-cell { border: 1px solid #e2e8f0; }
         </style>
         {% if risk_matrix.severity_labels and risk_matrix.impact_labels %}
-            {% set max_score = (risk_matrix.severity_labels|length - 1) + (risk_matrix.impact_labels|length - 1) %}
             <div class="flex flex-col space-y-3">
                 <div class="flex items-center text-sm font-semibold text-slate-700 mb-1">
                     <span class="inline-block" style="width:140px;"></span>
@@ -152,15 +301,20 @@
                             {% set sev_idx = loop.index0 %}
                             <tr class="tbl-row text-sm {% if loop.index0 % 2 == 1 %}tbl-row-alt{% endif %}">
                                 <td class="px-3 py-2 font-semibold border-t border-slate-100 text-center"><span data-label-id="risk-severity-{{ loop.index0 }}">{{ sev }}</span></td>
-                                {% for imp in risk_matrix.impact_labels %}
-                                    {% set score = sev_idx + loop.index0 %}
-                                    {% set tier = 'risk-low' %}
-                                    {% if score >= max_score - 1 %}
-                                        {% set tier = 'risk-high' %}
-                                    {% elif score >= (max_score // 2) %}
-                                        {% set tier = 'risk-med' %}
-                                    {% endif %}
-                                    <td class="px-3 py-2 text-center border-t border-l border-slate-100 risk-cell {{ tier }}">
+                            {% for imp in risk_matrix.impact_labels %}
+                                {% set sev_score = risk_matrix.severity_ranks.get(sev, 0) %}
+                                {% set imp_score = risk_matrix.impact_ranks.get(imp, 0) %}
+                                {% set score = sev_score + imp_score %}
+                                {% set tier = 'risk-low' %}
+                                {% if score >= 4 %}
+                                    {% set tier = 'risk-high' %}
+                                {% elif score >= 2 %}
+                                    {% set tier = 'risk-med' %}
+                                {% endif %}
+                                    <td class="px-3 py-2 text-center border-t border-l border-slate-100 risk-cell {{ tier }} cursor-pointer hover:ring-2 hover:ring-blue-300"
+                                        data-risk-cell
+                                        data-severity="{{ sev }}"
+                                        data-impact="{{ imp }}">
                                         <div class="font-semibold">{{ risk_matrix.counts[sev][imp] }}</div>
                                         <div class="text-xs text-slate-600">
                                             {% if tier == 'risk-high' %}<span data-label-id="risk-cell-high">High</span>{% elif tier == 'risk-med' %}<span data-label-id="risk-cell-medium">Medium</span>{% else %}<span data-label-id="risk-cell-low">Low</span>{% endif %}
@@ -182,6 +336,7 @@
         {% endif %}
     </div>
 </div>
+{% endif %}
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
@@ -193,6 +348,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const completionData = [{{ task_counts.completed }}, {{ task_counts.pending }}, {{ task_counts.overdue }}];
         const completionLabels = ["Completed", "Pending", "Overdue"];
     const allTasks = {{ tasks|tojson }};
+    const unassignedTasks = {{ unassigned_details|default([])|tojson }};
 
     const palette = ['#2563eb','#16a34a','#f59e0b','#ef4444','#8b5cf6','#0ea5e9'];
 
@@ -254,24 +410,45 @@ document.addEventListener('DOMContentLoaded', () => {
     // Task metric popup summaries
     const modal = document.getElementById('task-modal');
     const modalContent = document.getElementById('task-modal-content');
+    const modalTitle = document.getElementById('task-modal-title');
     const modalClose = document.getElementById('task-modal-close');
         function showTasks(filter) {
             if (!modal || !modalContent) return;
             let list = allTasks || [];
+            let titleText = 'Task Summary';
             modalContent.innerHTML = '';
-            if (filter === 'completed') {
-                list = list.filter(t => t.fully_completed);
-            } else if (filter === 'pending') {
-                list = list.filter(t => !t.fully_completed);
-            } else if (filter === 'overdue') {
-                list = list.filter(t => t.overdue);
+            if (typeof filter === 'string') {
+                if (filter === 'completed') {
+                    list = list.filter(t => t.fully_completed);
+                    titleText = 'Completed Tasks';
+                } else if (filter === 'pending') {
+                    list = list.filter(t => !t.fully_completed);
+                    titleText = 'Pending Tasks';
+                } else if (filter === 'overdue') {
+                    list = list.filter(t => t.overdue);
+                    titleText = 'Overdue Tasks';
+                } else if (filter === 'unassigned') {
+                    list = (unassignedTasks && unassignedTasks.length) ? unassignedTasks : list.filter(t => (t.assign_total || 0) === 0);
+                    titleText = 'Unassigned Tasks';
+                } else {
+                    titleText = 'All Tasks';
+                }
+            } else if (filter && filter.type === 'risk') {
+                const sev = filter.severity || 'Unspecified';
+                const imp = filter.impact || 'Unspecified';
+                list = list.filter(t => (t.severity || 'Unspecified') === sev && (t.impact || 'Unspecified') === imp);
+                titleText = `Tasks: ${sev} / ${imp}`;
             }
+            if (modalTitle) modalTitle.textContent = titleText;
+            const scrollWrap = document.createElement('div');
+            scrollWrap.className = 'overflow-x-auto';
             const wrapper = document.createElement('div');
-            wrapper.className = 'space-y-2 text-sm';
+            wrapper.className = 'space-y-2 text-sm min-w-[590px]';
             const header = document.createElement('div');
-            header.className = 'grid grid-cols-[280px,90px,160px,100px] gap-2 items-center bg-slate-100 px-3 py-2 rounded font-semibold text-slate-700 text-center';
+            header.className = 'grid grid-cols-[240px,120px,90px,140px,100px] gap-2 items-center bg-slate-100 px-3 py-2 rounded font-semibold text-slate-700 text-center';
             header.innerHTML = `
                 <div class="text-left"><span data-label-id="modal-col-task">Task</span></div>
+                <div class="text-center"><span data-label-id="modal-col-type">Task Type</span></div>
                 <div class="text-center"><span data-label-id="modal-col-percent">% Complete</span></div>
                 <div class="text-center"><span data-label-id="modal-col-users">No. Users Assigned</span></div>
                 <div class="text-center"><span data-label-id="modal-col-status">Status</span></div>
@@ -282,15 +459,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     const base = idx % 2 === 0 ? 'bg-slate-50' : 'bg-slate-100/60';
                     const row = document.createElement('div');
                     const overdue = t.overdue ? 'bg-red-50 border border-red-200' : base;
-                    row.className = `grid grid-cols-[280px,90px,160px,100px] gap-2 items-center px-3 py-2 rounded text-center ${overdue}`;
+                    row.className = `grid grid-cols-[240px,120px,90px,140px,100px] gap-2 items-center px-3 py-2 rounded text-center ${overdue}`;
                     const totalAssign = t.assign_total || 0;
                     const done = t.assign_completed || 0;
                     const pct = t.completion_pct || 0;
                     const flag = t.overdue
                         ? '<span class="text-red-700 font-semibold" data-label-id="modal-flag-overdue">Overdue</span>'
                         : (t.fully_completed ? '<span class="text-green-700 font-semibold" data-label-id="modal-flag-completed">Completed</span>' : '<span class="text-slate-600" data-label-id="modal-flag-pending">Pending</span>');
+                    const companyLabel = t.company_label ? t.company_label : 'Global';
+                    const companyDisplay = (companyLabel && companyLabel.toLowerCase() === 'global')
+                        ? '<span class="font-semibold">Global</span>'
+                        : companyLabel;
                     row.innerHTML = `
                         <div class="text-left text-base font-semibold text-slate-900">${t.title || 'Untitled'}</div>
+                        <div class="text-center text-xs text-slate-700">${companyDisplay}</div>
                         <div class="text-center text-xs text-slate-700">${pct}%</div>
                         <div class="text-center text-xs text-slate-700">${done}/${totalAssign || 0}</div>
                         <div class="text-center text-xs">${flag}</div>
@@ -301,9 +483,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const avgPct = list.length ? Math.round(list.reduce((s, t) => s + (t.completion_pct || 0), 0) / list.length) : 0;
                 const totalAssignSum = list.reduce((s, t) => s + (t.assign_total || 0), 0);
                 const totalDoneSum = list.reduce((s, t) => s + (t.assign_completed || 0), 0);
-                totalsRow.className = 'grid grid-cols-[280px,90px,160px,100px] gap-2 items-center px-3 py-2 rounded bg-slate-200 text-sm font-semibold text-slate-800 text-center';
+                totalsRow.className = 'grid grid-cols-[240px,120px,90px,140px,100px] gap-2 items-center px-3 py-2 rounded bg-slate-200 text-sm font-semibold text-slate-800 text-center';
                 totalsRow.innerHTML = `
                     <div class="text-left"><span data-label-id="modal-row-average">Average / Totals</span></div>
+                    <div></div>
                     <div>${avgPct}%</div>
                     <div>${totalDoneSum}/${totalAssignSum}</div>
                     <div></div>
@@ -315,7 +498,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 p.innerHTML = '<span data-label-id="modal-empty">No tasks found for this category.</span>';
                 wrapper.appendChild(p);
             }
-            modalContent.appendChild(wrapper);
+            scrollWrap.appendChild(wrapper);
+            modalContent.appendChild(scrollWrap);
             modal.classList.remove('hidden');
         }
     document.querySelectorAll('[data-metric-target]').forEach(btn => {
@@ -330,11 +514,43 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+    // Risk matrix cell clicks -> show tasks for that severity/impact
+    document.querySelectorAll('[data-risk-cell]').forEach(cell => {
+        cell.addEventListener('click', () => {
+            const sev = cell.getAttribute('data-severity');
+            const imp = cell.getAttribute('data-impact');
+            showTasks({ type: 'risk', severity: sev, impact: imp });
+        });
+    });
     if (modalClose) {
         modalClose.addEventListener('click', () => modal.classList.add('hidden'));
     }
     modal?.addEventListener('click', (e) => {
         if (e.target === modal) modal.classList.add('hidden');
+    });
+    // Unassigned tasks popup
+    const unassignedBtn = document.getElementById('view-unassigned');
+    const unassignedFooterBtn = document.getElementById('view-unassigned-footer');
+    const bindUnassigned = (btn) => {
+        if (!btn) return;
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            showTasks('unassigned');
+        });
+    };
+    bindUnassigned(unassignedBtn);
+    bindUnassigned(unassignedFooterBtn);
+
+    // Company row expand/collapse
+    document.querySelectorAll('[data-company-row]').forEach(row => {
+        row.addEventListener('click', () => {
+            const cid = row.getAttribute('data-company-id');
+            if (!cid) return;
+            const panel = document.getElementById(`company-users-${cid}`);
+            if (panel) {
+                panel.classList.toggle('hidden');
+            }
+        });
     });
 });
 </script>
@@ -346,7 +562,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <div id="task-modal" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
     <div class="bg-white rounded shadow-lg max-w-3xl w-11/12 md:w-3/4">
         <div class="flex items-center justify-between px-4 py-2 border-b">
-            <h4 class="font-semibold text-slate-800"><span data-label-id="modal-task-summary-title">Task Summary</span></h4>
+            <h4 id="task-modal-title" class="font-semibold text-slate-800"><span data-label-id="modal-task-summary-title">Task Summary</span></h4>
             <button id="task-modal-close" class="text-slate-500 hover:text-slate-700">&times;</button>
         </div>
         <div id="task-modal-content" class="p-4 max-h-[60vh] overflow-y-auto space-y-2 text-sm text-slate-700"></div>

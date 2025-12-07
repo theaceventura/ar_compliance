@@ -143,6 +143,8 @@ def create_tables_if_needed():
             show_module_tree INTEGER DEFAULT 0,
             show_cut_icon INTEGER DEFAULT 0,
             show_label_edit INTEGER DEFAULT 0,
+            show_task_charts INTEGER DEFAULT 1,
+            show_risk_matrix INTEGER DEFAULT 1,
             severity_palette TEXT,
             impact_palette TEXT,
             completion_palette TEXT
@@ -154,6 +156,10 @@ def create_tables_if_needed():
         cur.execute("ALTER TABLE app_settings ADD COLUMN show_cut_icon INTEGER DEFAULT 0")
     if not _column_exists(cur, "app_settings", "show_label_edit"):
         cur.execute("ALTER TABLE app_settings ADD COLUMN show_label_edit INTEGER DEFAULT 0")
+    if not _column_exists(cur, "app_settings", "show_task_charts"):
+        cur.execute("ALTER TABLE app_settings ADD COLUMN show_task_charts INTEGER DEFAULT 1")
+    if not _column_exists(cur, "app_settings", "show_risk_matrix"):
+        cur.execute("ALTER TABLE app_settings ADD COLUMN show_risk_matrix INTEGER DEFAULT 1")
     if not _column_exists(cur, "app_settings", "severity_palette"):
         cur.execute("ALTER TABLE app_settings ADD COLUMN severity_palette TEXT")
     if not _column_exists(cur, "app_settings", "impact_palette"):
@@ -172,8 +178,8 @@ def create_tables_if_needed():
     cur.execute("SELECT 1 FROM app_settings WHERE id=1")
     if cur.fetchone() is None:
         cur.execute("""
-            INSERT INTO app_settings (id, version, show_version, show_page_name, show_module_tree, show_cut_icon, show_label_edit, severity_palette, impact_palette, completion_palette)
-            VALUES (1, '', 0, 0, 0, 0, 0, '', '', '')
+            INSERT INTO app_settings (id, version, show_version, show_page_name, show_module_tree, show_cut_icon, show_label_edit, show_task_charts, show_risk_matrix, severity_palette, impact_palette, completion_palette)
+            VALUES (1, '', 0, 0, 0, 0, 0, 1, 1, '', '', '')
         """)
     # Seed default task field descriptions
     defaults = {
@@ -412,7 +418,8 @@ def admin_get_all_users(company_id=None):
     conn = get_connection()
     cur = conn.cursor()
     if company_id:
-        cur.execute("SELECT * FROM users WHERE company_id=? ORDER BY username", (company_id,))
+        # Exclude global admins from company-scoped lists
+        cur.execute("SELECT * FROM users WHERE company_id=? AND role!='admin' ORDER BY username", (company_id,))
     else:
         cur.execute("SELECT * FROM users ORDER BY username")
     rows = cur.fetchall()
@@ -504,15 +511,24 @@ def admin_get_app_settings():
 
 
 # Admin: update app settings
-def admin_update_app_settings(version, show_version, show_page_name, show_module_tree, show_cut_icon, show_label_edit):
+def admin_update_app_settings(version, show_version, show_page_name, show_module_tree, show_cut_icon, show_label_edit, show_task_charts, show_risk_matrix):
     """Persist the main app setting flags and version string."""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("""
         UPDATE app_settings
-        SET version=?, show_version=?, show_page_name=?, show_module_tree=?, show_cut_icon=?, show_label_edit=?
+        SET version=?, show_version=?, show_page_name=?, show_module_tree=?, show_cut_icon=?, show_label_edit=?, show_task_charts=?, show_risk_matrix=?
         WHERE id=1
-    """, (version, 1 if show_version else 0, 1 if show_page_name else 0, 1 if show_module_tree else 0, 1 if show_cut_icon else 0, 1 if show_label_edit else 0))
+    """, (
+        version,
+        1 if show_version else 0,
+        1 if show_page_name else 0,
+        1 if show_module_tree else 0,
+        1 if show_cut_icon else 0,
+        1 if show_label_edit else 0,
+        1 if show_task_charts else 0,
+        1 if show_risk_matrix else 0,
+    ))
     conn.commit()
     conn.close()
 
@@ -705,6 +721,7 @@ def admin_user_compliance(company_id):
             LEFT JOIN user_tasks ON users.id = user_tasks.user_id
             LEFT JOIN tasks ON tasks.id = user_tasks.task_id
             WHERE users.company_id=?
+              AND users.role!='admin'
               AND (tasks.company_id = users.company_id OR tasks.company_id IS NULL)
             GROUP BY users.id, users.username, users.role, users.first_name, users.last_name
             ORDER BY users.username
@@ -830,7 +847,7 @@ def admin_get_task_assignment_status(task_id):
     return {r["user_id"]: r["status"] for r in rows}
 
 def admin_ensure_assignments_for_company(company_id=None):
-    """Public helper to ensure tasks are assigned for a company (or all)."""
+    """Assign any missing user_tasks rows for the given company (or all companies) so dashboards stay in sync."""
     conn = get_connection()
     cur = conn.cursor()
     _assign_tasks_for_company(cur, company_id)
@@ -995,7 +1012,13 @@ def admin_get_user_report(user_id):
         return None, []
 
     cur.execute("""
-        SELECT tasks.title, tasks.due_date, user_tasks.status, user_tasks.completed_at,
+        SELECT tasks.id,
+               tasks.title,
+               tasks.due_date,
+               tasks.company_id,
+               companies.name AS company_name,
+               user_tasks.status,
+               user_tasks.completed_at,
                user_tasks.answer_text,
                CASE
                    WHEN user_tasks.status != 'completed'
@@ -1007,6 +1030,7 @@ def admin_get_user_report(user_id):
         FROM tasks
         JOIN user_tasks ON tasks.id=user_tasks.task_id
         JOIN users ON users.id = user_tasks.user_id
+        LEFT JOIN companies ON companies.id = tasks.company_id
         WHERE user_tasks.user_id=?
           AND (tasks.company_id = users.company_id OR tasks.company_id IS NULL)
     """, (user_id,))
@@ -1068,7 +1092,8 @@ def admin_get_companies(show_inactive=False):
         cur.execute("SELECT * FROM companies WHERE is_active=1 ORDER BY name")
     rows = cur.fetchall()
     conn.close()
-    return rows
+    # Ensure dict access works uniformly
+    return [dict(r) for r in rows]
 
 
 def admin_get_company(company_id):
@@ -1123,7 +1148,7 @@ def admin_update_company(company_id, name, admin_user_id=None, address1=None, ad
 
 # Admin: task completion rollup (assignments)
 def admin_task_completion_rollup(company_id=None):
-    """Return per-task assignment counts (completed vs total) scoped by company if provided."""
+    """Return per-task assignment counts (completed vs total); auto-fills any missing assignments first."""
     conn = get_connection()
     cur = conn.cursor()
     if company_id is None:

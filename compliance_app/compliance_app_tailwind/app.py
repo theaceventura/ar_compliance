@@ -22,7 +22,14 @@ db.create_tables_if_needed()
 def inject_app_settings():
     """Make app settings available to every template render."""
     settings = db.admin_get_app_settings()
-    return {"app_settings": settings}
+    def role_label(role):
+        mapping = {
+            "admin": "Global Admin",
+            "company_admin": "Company Admin",
+            "user": "User",
+        }
+        return mapping.get(role, role)
+    return {"app_settings": settings, "role_label": role_label}
 
 
 # Helper to read the current logged-in user from session
@@ -145,22 +152,26 @@ def dashboard():
     """Show dashboards tailored to admins, company admins, or individual users."""
     user = current_user()
     if user["role"] == "admin":
+        metric_mode = request.args.get("metric_mode")
+        if metric_mode not in ("task", "user"):
+            metric_mode = "task"
         selected_company_id = None
         company_arg = request.args.get("company_id")
         if company_arg is not None:
             company_arg = company_arg.strip()
-            if company_arg == "all" or company_arg == "":
-                selected_company_id = None
-                session.pop("selected_company_id", None)
-            else:
+            if company_arg and company_arg != "all":
                 try:
                     selected_company_id = int(company_arg)
-                    session["selected_company_id"] = selected_company_id
                 except ValueError:
                     selected_company_id = None
+            else:
+                selected_company_id = None
         else:
-            selected_company_id = session.get("selected_company_id")
+            # Default for admin is all companies
+            selected_company_id = None
+        session.pop("selected_company_id", None)
 
+        # Keep assignment rows in sync with current company/global tasks before rollups
         db.admin_ensure_assignments_for_company(selected_company_id)
 
         summary = db.admin_get_summary_counts(selected_company_id)
@@ -212,9 +223,10 @@ def dashboard():
         completion_defaults = ['#16a34a', '#f59e0b', '#ef4444']
         completion_palette = _palette_for_labels(completion_labels, completion_defaults, completion_map)
         tasks = db.admin_get_all_tasks(selected_company_id)
-        # Task metrics: base totals on unique tasks, overlay completion from assignments
+        # Task metrics: base totals on unique tasks, overlay completion from assignment rollup
         rollup = db.admin_task_completion_rollup(selected_company_id)
         tasks_json = []
+        unassigned_details = []
         for t in tasks:
             base = {k: t[k] for k in t.keys()}
             comp = rollup.get(t["id"], {"completed": 0, "total": 0})
@@ -222,14 +234,145 @@ def dashboard():
             base["assign_total"] = comp.get("total", 0)
             base["fully_completed"] = base["assign_total"] > 0 and base["assign_completed"] == base["assign_total"]
             base["completion_pct"] = round((base["assign_completed"] / base["assign_total"]) * 100, 1) if base["assign_total"] else 0
+            # Only flag overdue if not fully completed
+            overdue_raw = t["overdue"] if "overdue" in t.keys() else False
+            base["overdue"] = bool(overdue_raw and not base["fully_completed"])
+            base["company_label"] = base["company_name"] if "company_name" in base.keys() and base["company_name"] else "Global"
             tasks_json.append(base)
-        task_total = len(tasks_json)
-        task_overdue = sum(1 for t in tasks_json if t.get("overdue"))
-        task_completed = sum(1 for t in tasks_json if t.get("fully_completed"))
+            if selected_company_id is not None and base["assign_total"] == 0:
+                # For scoped company view, capture unassigned tasks directly
+                company_label = t["company_name"] if "company_name" in t.keys() else "Global"
+                unassigned_details.append({
+                    **base,
+                    "company_label": company_label,
+                })
+        # Use only tasks that have at least one assignment to avoid skewing counts
+        counted_tasks = [t for t in tasks_json if (t.get("assign_total") or 0) > 0]
+        # If admin is viewing all companies, treat every task with assignments across companies
+        task_total = len(counted_tasks)
+        task_overdue = sum(1 for t in counted_tasks if t.get("overdue"))
+        task_completed = sum(1 for t in counted_tasks if t.get("fully_completed"))
         task_pending = task_total - task_completed
         # Compliance based on fully completed tasks
         task_compliance_percent = round((task_completed / task_total) * 100, 1) if task_total else 0
         unassigned_tasks = sum(1 for t in tasks_json if t.get("assign_total", 0) == 0)
+        assignment_counts = {
+            "total": sum(t.get("assign_total") or 0 for t in tasks_json),
+            "completed": sum(t.get("assign_completed") or 0 for t in tasks_json),
+        }
+        assignment_counts["pending"] = max(assignment_counts["total"] - assignment_counts["completed"], 0)
+        assignment_counts["overdue"] = sum((t.get("assign_total") or 0) for t in tasks_json if t.get("overdue"))
+        user_counts = {
+            "total": user_metrics["total_users"],
+            "completed": user_metrics["completed_users"],
+            "pending": user_metrics["pending_users"],
+            "overdue": user_metrics["overdue_users"],
+            "compliance": user_metrics["compliance_pct"],
+        }
+        company_summaries = []
+        company_totals = None
+        company_user_rows = {}
+        unassigned_seen = set()
+        # Build per-company aggregates for all companies or the selected one
+        if selected_company_id is None:
+            # Include inactive companies so admin sees full rollup
+            companies_all = db.admin_get_companies(show_inactive=True)
+        else:
+            company_row = db.admin_get_company(selected_company_id)
+            companies_all = [company_row] if company_row else []
+        if not companies_all:
+            companies_all = db.admin_get_companies(show_inactive=True)
+        # Keep a copy for the template dropdown so we don't re-hit the DB and so it
+        # always matches what we used to build company_summaries.
+        companies_for_template = companies_all
+
+        def _company_rollup(company_id, company_name):
+            company_tasks = db.admin_get_all_tasks(company_id)
+            roll = db.admin_task_completion_rollup(company_id)
+            rows = []
+            for t in company_tasks:
+                comp = roll.get(t["id"], {"completed": 0, "total": 0})
+                assign_total = comp.get("total", 0)
+                assign_completed = comp.get("completed", 0)
+                fully_completed = assign_total > 0 and assign_completed == assign_total
+                overdue_raw = t["overdue"] if "overdue" in t.keys() else False
+                overdue_flag = bool(overdue_raw and not fully_completed)
+                rows.append({
+                    "assign_total": assign_total,
+                    "assign_completed": assign_completed,
+                    "fully_completed": fully_completed,
+                    "overdue": overdue_flag,
+                })
+                if assign_total == 0:
+                    key = (t["id"], company_id)
+                    if key not in unassigned_seen:
+                        unassigned_seen.add(key)
+                        company_label = t["company_name"] if "company_name" in t.keys() else company_name
+                        unassigned_details.append({
+                            "id": t["id"],
+                            "title": t["title"] if "title" in t.keys() else None,
+                            "assign_total": assign_total,
+                            "assign_completed": assign_completed,
+                            "completion_pct": 0,
+                            "fully_completed": False,
+                            "overdue": overdue_flag,
+                            "company_label": company_label,
+                        })
+            counted = [r for r in rows if r["assign_total"] > 0]
+            tasks_total = len(counted)
+            tasks_completed = sum(1 for r in counted if r["fully_completed"])
+            tasks_overdue = sum(1 for r in counted if r["overdue"])
+            tasks_pending = max(tasks_total - tasks_completed, 0)
+            unassigned = sum(1 for r in rows if r["assign_total"] == 0)
+            return {
+                "name": company_name,
+                "company_id": company_id,
+                "unassigned": unassigned,
+                "tasks_total": tasks_total,
+                "tasks_completed": tasks_completed,
+                "tasks_pending": tasks_pending,
+                "tasks_overdue": tasks_overdue,
+                "tasks_compliance": round((tasks_completed / tasks_total) * 100, 1) if tasks_total else 0,
+            }
+
+        for c in companies_all:
+            users_for_company = db.admin_user_compliance(c["id"])
+            # store with int and string keys so template lookups always work
+            company_user_rows[c["id"]] = users_for_company
+            company_user_rows[str(c["id"])] = users_for_company
+            rollup_row = _company_rollup(c["id"], c["name"])
+            rollup_row["user_count"] = len(company_user_rows[c["id"]])
+            company_summaries.append(rollup_row)
+        if company_summaries:
+            total_tasks_all = sum(r["tasks_total"] for r in company_summaries)
+            total_completed_all = sum(r["tasks_completed"] for r in company_summaries)
+            total_pending_all = sum(r["tasks_pending"] for r in company_summaries)
+            total_overdue_all = sum(r["tasks_overdue"] for r in company_summaries)
+            total_unassigned_all = sum(r["unassigned"] for r in company_summaries)
+            total_users_all = sum(r.get("user_count", 0) for r in company_summaries)
+            company_totals = {
+                "tasks_total": total_tasks_all,
+                "tasks_completed": total_completed_all,
+                "tasks_pending": total_pending_all,
+                "tasks_overdue": total_overdue_all,
+                "unassigned": total_unassigned_all,
+                "tasks_compliance": round((total_completed_all / total_tasks_all) * 100, 1) if total_tasks_all else 0,
+                "user_count": total_users_all,
+            }
+            unassigned_tasks = total_unassigned_all
+        # Ensure template always sees an iterable even if empty
+        company_summaries = company_summaries or []
+        company_user_rows = company_user_rows or {}
+        # Debug: log what we're sending to the template
+        try:
+            print(f"[DBG] companies_all={len(companies_all)}, summaries={len(company_summaries)}, user_rows={len(company_user_rows)}")
+        except Exception:
+            pass
+        # Fallback: ensure the template always receives something iterable
+        if company_summaries is None:
+            company_summaries = []
+        if company_user_rows is None:
+            company_user_rows = {}
         # Build a simple severity x impact matrix for a risk view
         def build_risk_matrix(task_list):
             severities = []
@@ -241,8 +384,10 @@ def dashboard():
                     severities.append(sev)
                 if imp not in impacts:
                     impacts.append(imp)
-            severities_sorted = sorted(severities)
-            impacts_sorted = sorted(impacts)
+            severity_order = {"Critical": 3, "High": 2, "Medium": 1, "Low": 0}
+            severities_sorted = sorted(severities, key=lambda v: (-severity_order.get(v, -1), v))
+            impact_order = {"Low": 0, "Medium": 1, "High": 2}
+            impacts_sorted = sorted(impacts, key=lambda v: (impact_order.get(v, len(impact_order)), v))
             counts = {sev: {imp: 0 for imp in impacts_sorted} for sev in severities_sorted}
             for t in task_list:
                 sev = t.get("severity") or "Unspecified"
@@ -253,6 +398,8 @@ def dashboard():
             return {
                 "severity_labels": severities_sorted,
                 "impact_labels": impacts_sorted,
+                "severity_ranks": {k: severity_order.get(k, 0) for k in severities_sorted},
+                "impact_ranks": {k: impact_order.get(k, 0) for k in impacts_sorted},
                 "counts": counts,
             }
         risk_matrix = build_risk_matrix(tasks_json)
@@ -273,20 +420,30 @@ def dashboard():
             severity_palette=severity_palette,
             impact_palette=impact_palette,
             completion_palette=completion_palette,
-            companies=db.admin_get_companies(),
+            companies=companies_for_template,
             selected_company_id=selected_company_id,
             is_company_admin=False,
             user_metrics=user_metrics,
             user=user,
             tasks=tasks_json,
             task_counts=task_counts,
+            assignment_counts=assignment_counts,
+            user_counts=user_counts,
+            metric_mode=metric_mode,
             unassigned_tasks=unassigned_tasks,
+            company_summaries=company_summaries,
+            company_totals=company_totals,
+            company_user_rows=company_user_rows,
             risk_matrix=risk_matrix,
+            unassigned_details=unassigned_details,
             page_name="templates/admin_task_dashboard.html",
         )
     if user["role"] == "company_admin" and request.args.get("view") != "personal":
         selected_company_id = user.get("company_id")
         db.admin_ensure_assignments_for_company(selected_company_id)
+        company_summaries = []
+        company_totals = None
+        company_user_rows = {}
         summary = db.admin_get_summary_counts(selected_company_id)
         severity_counts = db.admin_task_counts_by("severity", selected_company_id)
         impact_counts = db.admin_task_counts_by("impact", selected_company_id)
@@ -338,6 +495,7 @@ def dashboard():
         # Task metrics: base totals on unique tasks, overlay completion from assignments
         rollup = db.admin_task_completion_rollup(selected_company_id)
         tasks_json = []
+        unassigned_details = []
         for t in tasks:
             base = {k: t[k] for k in t.keys()}
             comp = rollup.get(t["id"], {"completed": 0, "total": 0})
@@ -345,13 +503,30 @@ def dashboard():
             base["assign_total"] = comp.get("total", 0)
             base["fully_completed"] = base["assign_total"] > 0 and base["assign_completed"] == base["assign_total"]
             base["completion_pct"] = round((base["assign_completed"] / base["assign_total"]) * 100, 1) if base["assign_total"] else 0
+            overdue_raw = t["overdue"] if "overdue" in t.keys() else False
+            base["overdue"] = bool(overdue_raw and not base["fully_completed"])
+            base["company_label"] = base["company_name"] if "company_name" in base.keys() and base["company_name"] else "Global"
             tasks_json.append(base)
-        task_total = len(tasks_json)
-        task_overdue = sum(1 for t in tasks_json if t.get("overdue"))
-        task_completed = sum(1 for t in tasks_json if t.get("fully_completed"))
+            if base["assign_total"] == 0:
+                company_label = t["company_name"] if "company_name" in t.keys() else "Global"
+                unassigned_details.append({
+                    **base,
+                    "company_label": company_label,
+                })
+        # Task counts (unique tasks with assignments) and assignment totals for visibility
+        counted_tasks = [t for t in tasks_json if (t.get("assign_total") or 0) > 0]
+        task_total = len(counted_tasks)
+        task_overdue = sum(1 for t in counted_tasks if t.get("overdue"))
+        task_completed = sum(1 for t in counted_tasks if t.get("fully_completed"))
         task_pending = task_total - task_completed
         task_compliance_percent = round((task_completed / task_total) * 100, 1) if task_total else 0
         unassigned_tasks = sum(1 for t in tasks_json if t.get("assign_total", 0) == 0)
+        assignment_counts = {
+            "total": sum(t.get("assign_total") or 0 for t in tasks_json),
+            "completed": sum(t.get("assign_completed") or 0 for t in tasks_json),
+        }
+        assignment_counts["pending"] = max(assignment_counts["total"] - assignment_counts["completed"], 0)
+        assignment_counts["overdue"] = sum((t.get("assign_total") or 0) for t in tasks_json if t.get("overdue"))
         def build_risk_matrix(task_list):
             severities = []
             impacts = []
@@ -363,7 +538,8 @@ def dashboard():
                 if imp not in impacts:
                     impacts.append(imp)
             severities_sorted = sorted(severities)
-            impacts_sorted = sorted(impacts)
+            impact_order = {"Low": 0, "Medium": 1, "High": 2}
+            impacts_sorted = sorted(impacts, key=lambda v: (impact_order.get(v, len(impact_order)), v))
             counts = {sev: {imp: 0 for imp in impacts_sorted} for sev in severities_sorted}
             for t in task_list:
                 sev = t.get("severity") or "Unspecified"
@@ -383,6 +559,33 @@ def dashboard():
             "pending": task_pending,
             "overdue": task_overdue,
         }
+        company_row = db.admin_get_company(selected_company_id) if selected_company_id else None
+        company_name = "Company"
+        if company_row:
+            company_name = company_row["name"] if "name" in company_row.keys() else f"Company #{selected_company_id}"
+        elif selected_company_id:
+            company_name = f"Company #{selected_company_id}"
+        company_summaries = [{
+            "name": company_name,
+            "company_id": selected_company_id,
+            "unassigned": unassigned_tasks,
+            "tasks_total": task_total,
+            "tasks_completed": task_completed,
+            "tasks_pending": task_pending,
+            "tasks_overdue": task_overdue,
+            "tasks_compliance": task_compliance_percent,
+            "user_count": len(compliance),
+        }]
+        company_totals = {
+            "tasks_total": task_total,
+            "tasks_completed": task_completed,
+            "tasks_pending": task_pending,
+            "tasks_overdue": task_overdue,
+            "unassigned": unassigned_tasks,
+            "tasks_compliance": task_compliance_percent,
+            "user_count": len(compliance),
+        }
+        company_user_rows = {selected_company_id: compliance} if selected_company_id else {}
         return render_template(
             "admin_task_dashboard.html",
             summary=summary,
@@ -401,8 +604,13 @@ def dashboard():
             user=user,
             tasks=tasks_json,
             task_counts=task_counts,
+            assignment_counts=assignment_counts,
             unassigned_tasks=unassigned_tasks,
+            company_summaries=company_summaries,
+            company_totals=company_totals,
+            company_user_rows=company_user_rows,
             risk_matrix=risk_matrix,
+            unassigned_details=unassigned_details,
             page_name="templates/admin_task_dashboard.html",
         )
 
@@ -491,7 +699,24 @@ def dashboard():
 def task_detail(task_id):
     """Display a single task and accept an answer submission."""
     user = current_user()
-    t = db.get_task_for_user(user["id"], task_id)
+    acting_user_id = user["id"]
+    acting_user = None
+    override_user = request.args.get("user_id")
+    if override_user and user["role"] in ("admin", "company_admin"):
+        try:
+            target_id = int(override_user)
+            target_row = db.admin_get_user(target_id, user.get("company_id") if user["role"] == "company_admin" else None)
+            if target_row:
+                acting_user_id = target_id
+                acting_user = target_row
+        except ValueError:
+            pass
+
+    t = db.get_task_for_user(acting_user_id, task_id)
+    if t is None and acting_user is not None:
+        # Ensure the target user has all applicable assignments, then retry
+        db.ensure_user_assignments(acting_user_id, acting_user.get("company_id"))
+        t = db.get_task_for_user(acting_user_id, task_id)
     if t is None:
         return "Not found", 404
 
@@ -516,6 +741,7 @@ def task_detail(task_id):
             completed_at_display=completed_at_display,
             due_date_display=due_date_display,
             is_completed=t["status"] == "completed",
+            acting_user=acting_user,
             page_name="templates/task_detail.html",
         )
 
@@ -523,9 +749,12 @@ def task_detail(task_id):
     expected = t["verification_answer"].strip()
     correct = user_answer.lower() == expected.lower()
 
-    db.mark_task_result(user["id"], task_id, user_answer, correct)
+    db.mark_task_result(acting_user_id, task_id, user_answer, correct)
 
     flash("Correct! Task completed." if correct else "Incorrect answer.")
+    # If acting as another user, return to their admin report; otherwise go to personal dashboard
+    if acting_user:
+        return redirect(f"/admin/report/{acting_user_id}")
     return redirect(url_for("dashboard"))
 
 
@@ -582,6 +811,9 @@ def user_dashboard():
     else:
         selected_company_id = user.get("company_id")
 
+    # Keep assignments in sync for the selected scope so compliance data is accurate
+    db.admin_ensure_assignments_for_company(selected_company_id)
+
     summary = db.admin_get_summary_counts(selected_company_id)
     compliance = db.admin_user_compliance(selected_company_id)
     pending_non_overdue = max(summary["total_pending"] - summary.get("total_overdue", 0), 0)
@@ -629,7 +861,17 @@ def admin_tasks():
         else:
             selected_company_id = None
 
-        tasks = db.admin_get_all_tasks(selected_company_id)
+        tasks_raw = db.admin_get_all_tasks(selected_company_id)
+        tasks = []
+        for t in tasks_raw:
+            due_display = None
+            if t["due_date"]:
+                try:
+                    due_dt = datetime.strptime(t["due_date"], "%Y-%m-%d")
+                    due_display = due_dt.strftime("%d/%m/%Y")
+                except ValueError:
+                    due_display = t["due_date"]
+            tasks.append({**t, "due_display": due_display})
         impacts = db.admin_get_options("impact", admin["company_id"])
         severities = db.admin_get_options("severity", admin["company_id"])
         users = db.admin_get_all_users(selected_company_id)
@@ -828,7 +1070,25 @@ def admin_users():
     users = db.admin_get_all_users(filter_company_id) if filter_company_id else db.admin_get_all_users()
     companies = db.admin_get_companies()
     company_lookup = {c["id"]: c["name"] for c in companies}
-    return render_template("admin_users.html", users=users, selected_user=selected_user, companies=companies, company_lookup=company_lookup, allow_admin_role=True, is_company_admin=False, selected_company_id=filter_company_id, page_name="templates/admin_users.html")
+    compliance_rows = db.admin_user_compliance(filter_company_id)
+    user_task_counts = {}
+    for r in compliance_rows:
+        total_tasks_val = r["total_tasks"] if "total_tasks" in r.keys() else 0
+        user_task_counts[r["id"]] = total_tasks_val
+    unassigned_users_count = sum(1 for u in users if user_task_counts.get(u["id"], 0) == 0)
+    return render_template(
+        "admin_users.html",
+        users=users,
+        selected_user=selected_user,
+        companies=companies,
+        company_lookup=company_lookup,
+        allow_admin_role=True,
+        is_company_admin=False,
+        selected_company_id=filter_company_id,
+        user_task_counts=user_task_counts,
+        unassigned_users_count=unassigned_users_count,
+        page_name="templates/admin_users.html",
+    )
 
 
 # Admin: create or update a user
@@ -914,7 +1174,24 @@ def company_admin_users():
         company_row = db.admin_get_company(company_id)
         companies = [company_row] if company_row else []
         company_lookup = {company_row["id"]: company_row["name"]} if company_row else {}
-        return render_template("admin_users.html", users=users, selected_user=selected_user, companies=companies, company_lookup=company_lookup, allow_admin_role=False, is_company_admin=True, page_name="templates/company_admin_users.html")
+        compliance_rows = db.admin_user_compliance(company_id)
+        user_task_counts = {}
+        for r in compliance_rows:
+            total_tasks_val = r["total_tasks"] if "total_tasks" in r.keys() else 0
+            user_task_counts[r["id"]] = total_tasks_val
+        unassigned_users_count = sum(1 for u in users if user_task_counts.get(u["id"], 0) == 0)
+        return render_template(
+            "admin_users.html",
+            users=users,
+            selected_user=selected_user,
+            companies=companies,
+            company_lookup=company_lookup,
+            allow_admin_role=False,
+            is_company_admin=True,
+            user_task_counts=user_task_counts,
+            unassigned_users_count=unassigned_users_count,
+            page_name="templates/company_admin_users.html",
+        )
 
     # POST create/update
     username = request.form.get("username", "").strip()
@@ -1116,7 +1393,18 @@ def admin_app_settings():
     show_module_tree = request.form.get("show_module_tree") == "on"
     show_cut_icon = request.form.get("show_cut_icon") == "on"
     show_label_edit = request.form.get("show_label_edit") == "on"
-    db.admin_update_app_settings(version, show_version, show_page_name, show_module_tree, show_cut_icon, show_label_edit)
+    show_task_charts = request.form.get("show_task_charts") == "on"
+    show_risk_matrix = request.form.get("show_risk_matrix") == "on"
+    db.admin_update_app_settings(
+        version,
+        show_version,
+        show_page_name,
+        show_module_tree,
+        show_cut_icon,
+        show_label_edit,
+        show_task_charts,
+        show_risk_matrix,
+    )
     flash("Settings updated.")
     return redirect(url_for("admin_app_settings"))
 
@@ -1204,7 +1492,8 @@ def admin_report(user_id):
                 completed_display = comp_dt.strftime("%d/%m/%Y")
             except ValueError:
                 completed_display = t["completed_at"]
-        formatted_tasks.append({**t, "due_display": due_display, "completed_display": completed_display})
+        task_type = t["company_name"] if "company_name" in t.keys() and t["company_id"] else "Global"
+        formatted_tasks.append({**t, "due_display": due_display, "completed_display": completed_display, "task_id": t["id"], "task_type": task_type})
     return render_template("admin_report.html", user=user_row, tasks=formatted_tasks, page_name="templates/admin_report.html")
 
 
@@ -1259,7 +1548,7 @@ def company_admin_report(user_id):
                 completed_display = comp_dt.strftime("%d/%m/%Y")
             except ValueError:
                 completed_display = t["completed_at"]
-        formatted_tasks.append({**t, "due_display": due_display, "completed_display": completed_display})
+        formatted_tasks.append({**t, "due_display": due_display, "completed_display": completed_display, "task_id": t["id"]})
     return render_template("admin_report.html", user=user_row, tasks=formatted_tasks, page_name="templates/admin_report.html")
 
 

@@ -9,7 +9,7 @@
         <div class="flex items-center space-x-4">
             <label class="inline-flex items-center space-x-2 text-sm text-slate-700">
                 <input type="checkbox" id="filterAdmins" data-role-target="{{ 'company_admin' if is_company_admin else 'admin' }}" class="h-4 w-4">
-                <span>{% if is_company_admin %}Show company admins only{% else %}Show admin users only{% endif %}</span>
+                <span>{% if is_company_admin %}Show Company Admins only{% else %}Show Global Admins only{% endif %}</span>
             </label>
             {% if not is_company_admin %}
             <form method="GET" class="flex items-center space-x-2 text-sm">
@@ -27,17 +27,18 @@
         </div>
     </div>
     <div class="p-4 space-y-2 text-sm">
-        <div class="tbl-header text-sm grid grid-cols-[1.3fr,1.1fr,1fr,1.4fr,0.8fr,0.7fr] gap-2 items-center">
+        <div class="tbl-header text-sm grid grid-cols-[1.3fr,1.1fr,1fr,0.8fr,0.7fr] gap-2 items-center">
             <div class="text-left">Name</div>
             <div class="text-left">Username</div>
             <div class="text-left">Company</div>
-            <div class="text-left">Contact</div>
             <div class="text-center">Role</div>
             <div class="text-center">Report</div>
         </div>
         {% if users %}
             {% for u in users %}
-                <div class="user-row grid grid-cols-[1.3fr,1.1fr,1fr,1.4fr,0.8fr,0.7fr] gap-2 items-center tbl-row text-sm {% if loop.index0 % 2 == 0 %}tbl-row-bg{% else %}tbl-row-alt{% endif %}" data-role="{{ u.role }}">
+                {% set tasks_total = user_task_counts.get(u.id, 0) if user_task_counts is defined else 0 %}
+                {% set warn = tasks_total == 0 %}
+                <div class="user-row grid grid-cols-[1.3fr,1.1fr,1fr,0.8fr,0.7fr] gap-2 items-center tbl-row text-sm {% if loop.index0 % 2 == 0 %}tbl-row-bg{% else %}tbl-row-alt{% endif %} {{ 'bg-amber-50 border border-amber-200' if warn else '' }}" data-role="{{ u.role }}">
                     <div class="text-left text-sm text-slate-700 truncate">
                         {{ u.first_name }} {{ u.last_name }}
                     </div>
@@ -51,12 +52,7 @@
                             {{ 'Company #' ~ u.company_id if u.company_id else 'Unassigned' }}
                         {% endif %}
                     </div>
-                    <div class="text-left text-xs text-slate-600">
-                        {% if u.email %}<div>{{ u.email }}</div>{% endif %}
-                        {% if u.mobile %}<div>{{ u.mobile }}</div>{% endif %}
-                        {% if u.send_notifications %}<div class="text-green-700">Notifications</div>{% endif %}
-                    </div>
-                    <div class="text-center text-sm">{{ u.role }}</div>
+                    <div class="text-center text-sm">{{ role_label(u.role) }}</div>
                     <div class="text-center text-sm">
                         {% if u.role == "user" %}
                             {% if is_company_admin %}
@@ -72,6 +68,18 @@
             {% endfor %}
         {% else %}
             <div class="tbl-empty text-sm">No users found for this filter.</div>
+        {% endif %}
+        <div id="user-table-controls" class="flex items-center justify-between text-xs text-slate-600 mt-2">
+            <div id="user-table-status"></div>
+            <div class="space-x-2">
+                <button type="button" id="user-table-show-more" class="px-2 py-1 border rounded bg-white hover:bg-slate-50">Show more</button>
+                <button type="button" id="user-table-show-all" class="px-2 py-1 border rounded bg-white hover:bg-slate-50">Show all</button>
+            </div>
+        </div>
+        {% if unassigned_users_count and unassigned_users_count > 0 %}
+            <div class="mt-2 bg-amber-50 border border-amber-200 text-amber-800 rounded px-3 py-2 text-xs">
+                No tasks assigned to {{ unassigned_users_count }} user{% if unassigned_users_count != 1 %}s{% endif %}. Assign tasks to include them in metrics.
+            </div>
         {% endif %}
     </div>
 </div>
@@ -116,7 +124,7 @@
                 <option value="" disabled {% if not selected_user or not selected_user.role %}selected{% endif %}>-- Select role --</option>
                 <option value="user" {% if selected_user and selected_user.role == 'user' %}selected{% endif %}>User</option>
                 {% if allow_admin_role %}
-                <option value="admin" {% if selected_user and selected_user.role == 'admin' %}selected{% endif %}>Admin</option>
+                <option value="admin" {% if selected_user and selected_user.role == 'admin' %}selected{% endif %}>Global Admin</option>
                 {% endif %}
                 <option value="company_admin" {% if selected_user and selected_user.role == 'company_admin' %}selected{% endif %}>Company Admin</option>
             </select>
@@ -185,6 +193,33 @@
                 r.style.display = (!showAdmins || role === targetRole) ? '' : 'none';
             });
         });
+    }
+
+    // Row limiter: show first 5, allow expanding
+    const limit = 5;
+    const userRows = Array.from(rows);
+    const statusEl = document.getElementById('user-table-status');
+    const showMoreBtn = document.getElementById('user-table-show-more');
+    const showAllBtn = document.getElementById('user-table-show-all');
+    function updateVisibility(showAll=false) {
+        userRows.forEach((r, idx) => {
+            if (showAll || idx < limit) {
+                r.classList.remove('hidden');
+            } else {
+                r.classList.add('hidden');
+            }
+        });
+        if (statusEl) {
+            const visibleCount = showAll ? userRows.length : Math.min(userRows.length, limit);
+            statusEl.textContent = `Showing ${visibleCount} of ${userRows.length}`;
+        }
+    }
+    if (userRows.length) {
+        updateVisibility(false);
+        showMoreBtn?.addEventListener('click', () => updateVisibility(false));
+        showAllBtn?.addEventListener('click', () => updateVisibility(true));
+    } else if (statusEl) {
+        statusEl.textContent = 'No users';
     }
 </script>
 

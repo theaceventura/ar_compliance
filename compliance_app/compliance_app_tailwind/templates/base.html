@@ -47,6 +47,7 @@
             color: #64748b;
         }
     </style>
+    {% block extra_styles %}{% endblock %}
 </head>
 <body class="bg-slate-100">
     <nav class="bg-white shadow mb-6">
@@ -70,7 +71,7 @@
                             </div>
                         </div>
                         <div class="relative inline-block" data-menu>
-                            <button type="button" class="hover:underline" data-menu-button><span data-label-id="nav-admin">Admin ▾</span></button>
+                            <button type="button" class="hover:underline" data-menu-button><span data-label-id="nav-admin">Global Admin ▾</span></button>
                             <div class="hidden absolute right-0 mt-2 w-48 bg-white border shadow-lg rounded z-10" data-menu-dropdown>
                                 <a href="/admin/dashboard" class="block px-3 py-2 hover:bg-slate-100"><span data-label-id="nav-admin-dashboard">Admin Dashboard</span></a>
                                 <a href="/admin/companies" class="block px-3 py-2 hover:bg-slate-100"><span data-label-id="nav-company-config">Company Config</span></a>

@@ -109,7 +109,7 @@
             <div class="user-status-row tbl-row text-sm grid grid-cols-[180px,160px,90px,120px,100px,90px] gap-2 items-center rounded {{ row_class }}" data-pending="{{ pending }}" data-overdue="{{ overdue }}">
                 <div class="text-left truncate">{{ row.first_name or '' }} {{ row.last_name or '' }}</div>
                 <div class="text-left truncate">{{ row.username }}</div>
-                <div class="text-center">{{ row.role }}</div>
+                <div class="text-center">{{ role_label(row.role) }}</div>
                 <div class="text-center">{{ completed }} / {{ total }}</div>
                 <div class="text-center">
                     {% if overdue > 0 %}

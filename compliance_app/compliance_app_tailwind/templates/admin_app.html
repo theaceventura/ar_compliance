@@ -76,4 +76,25 @@
     </form>
 </div>
 
+<div class="bg-white shadow rounded max-w-xl mt-6 relative" data-widget-id="app-config-display-options">
+    <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Admin and Company Admin Task Display Options</div>
+    <form method="POST" class="p-4 space-y-2 text-sm">
+        <div class="grid grid-cols-[1fr,180px] items-center px-3 py-2 rounded bg-slate-50 text-sm">
+            <div class="text-left">Show Task Risk Charts</div>
+            <div class="text-center">
+                <input type="checkbox" name="show_task_charts" {% if settings.show_task_charts %}checked{% endif %} class="h-4 w-4">
+            </div>
+        </div>
+        <div class="grid grid-cols-[1fr,180px] items-center px-3 py-2 rounded bg-slate-100/60 text-sm">
+            <div class="text-left">Show Task Risk Matrix</div>
+            <div class="text-center">
+                <input type="checkbox" name="show_risk_matrix" {% if settings.show_risk_matrix %}checked{% endif %} class="h-4 w-4">
+            </div>
+        </div>
+        <div class="flex items-center gap-2 pt-2 px-3">
+            <button class="bg-blue-600 text-white px-4 py-2 rounded">Save</button>
+        </div>
+    </form>
+</div>
+
 {% endblock %}

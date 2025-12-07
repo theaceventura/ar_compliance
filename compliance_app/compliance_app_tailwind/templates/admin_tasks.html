@@ -48,7 +48,7 @@
                         <div class="text-center"><span class="inline-block px-2 py-1 bg-red-50 text-red-700 rounded whitespace-nowrap">{{ t.severity or "—" }}</span></div>
                         <div class="text-center"><span class="inline-block px-2 py-1 bg-blue-50 text-blue-700 rounded whitespace-nowrap">{{ t.impact or "—" }}</span></div>
                         <div class="text-center text-xs text-slate-600 whitespace-nowrap">
-                            {{ t.due_date or "—" }}
+                            {{ t.due_display or "—" }}
                         </div>
                         <div class="text-center text-xs text-slate-700 whitespace-nowrap">
                             {% if t.overdue %}
