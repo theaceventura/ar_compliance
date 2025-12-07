@@ -348,6 +348,15 @@ def dashboard():
             rollup_row = _company_rollup(c["id"], c["name"])
             rollup_row["user_count"] = len(company_user_rows[c["id"]])
             company_summaries.append(rollup_row)
+        try:
+            debug_users = {
+                cid: [u["username"] for u in rows]
+                for cid, rows in company_user_rows.items()
+                if isinstance(cid, int)
+            }
+            print("[DBG company users]", debug_users)
+        except Exception:
+            pass
         if company_summaries:
             total_tasks_all = sum(r["tasks_total"] for r in company_summaries)
             total_completed_all = sum(r["tasks_completed"] for r in company_summaries)
@@ -1567,8 +1576,8 @@ def admin_profile():
     role = viewer.get("role")
     # Determine company selection permissions
     if role == "admin":
-        companies = db.admin_get_companies()
-        allow_company_change = True
+        companies = []
+        allow_company_change = False
         locked_company_id = None
     elif role == "company_admin":
         companies = [c for c in db.admin_get_companies() if c["id"] == viewer.get("company_id")]
@@ -1597,7 +1606,10 @@ def admin_profile():
     send_notifications = request.form.get("send_notifications") == "on"
     is_active = request.form.get("is_active") == "on"
     req_company_id = request.form.get("company_id", type=int)
-    company_id = req_company_id if (req_company_id and allow_company_change) else (locked_company_id or user["company_id"])
+    if role == "admin":
+        company_id = None
+    else:
+        company_id = req_company_id if (req_company_id and allow_company_change) else (locked_company_id or user["company_id"])
 
     hashed_pw = generate_password_hash(password) if password else None
 
