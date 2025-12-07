@@ -9,7 +9,7 @@
         <div class="flex items-center space-x-4">
             <label class="inline-flex items-center space-x-2 text-sm text-slate-700">
                 <input type="checkbox" id="filterAdmins" data-role-target="{{ 'company_admin' if is_company_admin else 'admin' }}" class="h-4 w-4">
-                <span>{% if is_company_admin %}Show Company Admins only{% else %}Show Global Admins only{% endif %}</span>
+                <span>Show Company Admins only</span>
             </label>
             {% if not is_company_admin %}
             <form method="GET" class="flex items-center space-x-2 text-sm">
