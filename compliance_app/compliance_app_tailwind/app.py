@@ -259,14 +259,13 @@ def dashboard():
                     **base,
                     "company_label": company_label,
                 })
-        # Use only tasks that have at least one assignment to avoid skewing counts
+        # Totals should include all tasks (global + company), even if currently unassigned
         counted_tasks = [t for t in tasks_json if (t.get("assign_total") or 0) > 0]
-        # If admin is viewing all companies, treat every task with assignments across companies
-        task_total = len(counted_tasks)
-        task_overdue = sum(1 for t in counted_tasks if t.get("overdue"))
-        task_completed = sum(1 for t in counted_tasks if t.get("fully_completed"))
-        task_pending = task_total - task_completed
-        # Compliance based on fully completed tasks
+        task_total = len(tasks_json)
+        task_overdue = sum(1 for t in tasks_json if t.get("overdue"))
+        task_completed = sum(1 for t in tasks_json if t.get("fully_completed"))
+        task_pending = max(task_total - task_completed, 0)
+        # Compliance based on fully completed tasks across all tasks
         task_compliance_percent = round((task_completed / task_total) * 100, 1) if task_total else 0
         unassigned_tasks = sum(1 for t in tasks_json if t.get("assign_total", 0) == 0)
         assignment_counts = {
@@ -341,6 +340,7 @@ def dashboard():
                 "name": company_name,
                 "company_id": company_id,
                 "unassigned": unassigned,
+                "assignments_total": sum(r["assign_total"] for r in rows),
                 "tasks_total": tasks_total,
                 "tasks_completed": tasks_completed,
                 "tasks_pending": tasks_pending,
@@ -378,6 +378,7 @@ def dashboard():
             total_unassigned_all = sum(r["unassigned"] for r in company_summaries)
             total_users_all = sum(r.get("user_count", 0) for r in company_summaries)
             company_totals = {
+                "assignments_total": sum(r.get("assignments_total", 0) for r in company_summaries),
                 "tasks_total": total_tasks_all,
                 "tasks_completed": total_completed_all,
                 "tasks_pending": total_pending_all,
@@ -540,14 +541,15 @@ def dashboard():
                     **base,
                     "company_label": company_label,
                 })
-        # Task counts (unique tasks with assignments) and assignment totals for visibility
+        # Task counts include all tasks (global + company), even if unassigned
         counted_tasks = [t for t in tasks_json if (t.get("assign_total") or 0) > 0]
-        task_total = len(counted_tasks)
-        task_overdue = sum(1 for t in counted_tasks if t.get("overdue"))
-        task_completed = sum(1 for t in counted_tasks if t.get("fully_completed"))
-        task_pending = task_total - task_completed
+        task_total = len(tasks_json)
+        task_overdue = sum(1 for t in tasks_json if t.get("overdue"))
+        task_completed = sum(1 for t in tasks_json if t.get("fully_completed"))
+        task_pending = max(task_total - task_completed, 0)
         task_compliance_percent = round((task_completed / task_total) * 100, 1) if task_total else 0
         unassigned_tasks = sum(1 for t in tasks_json if t.get("assign_total", 0) == 0)
+        assignments_total = sum(t.get("assign_total") or 0 for t in tasks_json)
         assignment_counts = {
             "total": sum(t.get("assign_total") or 0 for t in tasks_json),
             "completed": sum(t.get("assign_completed") or 0 for t in tasks_json),
@@ -596,6 +598,7 @@ def dashboard():
             "name": company_name,
             "company_id": selected_company_id,
             "unassigned": unassigned_tasks,
+            "assignments_total": assignments_total,
             "tasks_total": task_total,
             "tasks_completed": task_completed,
             "tasks_pending": task_pending,
@@ -604,6 +607,7 @@ def dashboard():
             "user_count": len(compliance),
         }]
         company_totals = {
+            "assignments_total": assignments_total,
             "tasks_total": task_total,
             "tasks_completed": task_completed,
             "tasks_pending": task_pending,
