@@ -73,6 +73,11 @@
             <div class="bg-slate-100 px-4 py-2 rounded-t font-semibold text-slate-700 flex items-center justify-between">
                 <h3>Create New Task</h3>
             </div>
+            {% if app_settings.show_validation_notes %}
+            <div class="px-4 pt-3 text-xs text-slate-600 bg-slate-50 border-b border-slate-200">
+                Validation: Company tasks can only be assigned to users in that company; global tasks go to all users. Cross-company assignments are blocked and cleaned. Due dates drive overdue status.
+            </div>
+            {% endif %}
             <form method="POST" class="p-4 space-y-2 text-sm">
                 <div class="grid grid-cols-[180px,1fr] items-center px-3 py-2 rounded bg-slate-50">
                     <div class="text-left font-medium">Title</div>

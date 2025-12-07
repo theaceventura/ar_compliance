@@ -1427,6 +1427,7 @@ def admin_app_settings():
     show_task_charts = request.form.get("show_task_charts") == "on"
     show_risk_matrix = request.form.get("show_risk_matrix") == "on"
     show_user_banner = request.form.get("show_user_banner") == "on"
+    show_validation_notes = request.form.get("show_validation_notes") == "on"
     db.admin_update_app_settings(
         version,
         show_version,
@@ -1437,6 +1438,7 @@ def admin_app_settings():
         show_task_charts,
         show_risk_matrix,
         show_user_banner,
+        show_validation_notes,
     )
     flash("Settings updated.")
     return redirect(url_for("admin_app_settings"))

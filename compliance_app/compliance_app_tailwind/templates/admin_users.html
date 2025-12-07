@@ -92,6 +92,11 @@
     <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700 flex items-center justify-between">
         <span>{{ selected_user and 'Edit user' or 'Add user' }}</span>
     </div>
+    {% if app_settings.show_validation_notes %}
+    <div class="px-3 pt-3 text-xs text-slate-600 bg-slate-50 border-b border-slate-200">
+        Validation: A user belongs to a single company. When the company changes, tasks from other companies are removed and applicable company/global tasks are assigned. At least one Global Admin must always remain.
+    </div>
+    {% endif %}
     <form id="user-form" method="POST" class="p-4 space-y-2 text-sm">
         <input type="hidden" name="user_id" value="{{ selected_user.id if selected_user }}">
         <div class="grid grid-cols-[160px,1fr] items-center px-3 py-2 rounded bg-slate-50">

@@ -43,6 +43,12 @@
             </div>
         </div>
         <div class="grid grid-cols-[1fr,180px] items-center px-3 py-2 rounded bg-slate-50 text-sm">
+            <div class="text-left">Show validation notes on setup screens</div>
+            <div class="text-center">
+                <input type="checkbox" name="show_validation_notes" {% if settings.show_validation_notes %}checked{% endif %} class="h-4 w-4">
+            </div>
+        </div>
+        <div class="grid grid-cols-[1fr,180px] items-center px-3 py-2 rounded bg-slate-50 text-sm">
             <div class="text-left">Show logged-in user/role banner</div>
             <div class="text-center">
                 <input type="checkbox" name="show_user_banner" {% if settings.show_user_banner %}checked{% endif %} class="h-4 w-4">

@@ -48,6 +48,11 @@
     <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700 flex items-center justify-between">
         <span>{{ selected_company and 'Edit company' or 'Add company' }}</span>
     </div>
+    {% if app_settings.show_validation_notes %}
+    <div class="px-3 pt-3 text-xs text-slate-600 bg-slate-50 border-b border-slate-200">
+        Validation: Companies are the scope for company tasks and users. Assignments are restricted to matching company; inactive companies are hidden by default in filters.
+    </div>
+    {% endif %}
     <form id="company-form" method="POST" class="p-4 space-y-2 text-sm">
         <input type="hidden" name="company_id" value="{{ selected_company.id if selected_company }}">
         <div class="grid grid-cols-[160px,1fr] items-center px-3 py-2 rounded bg-slate-50">
