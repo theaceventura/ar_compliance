@@ -427,9 +427,23 @@ def admin_get_all_users(company_id=None):
     cur = conn.cursor()
     if company_id:
         # Exclude global admins from company-scoped lists
-        cur.execute("SELECT * FROM users WHERE company_id=? AND role!='admin' ORDER BY username", (company_id,))
+        cur.execute("""
+            SELECT *
+            FROM users
+            WHERE company_id=?
+              AND LOWER(role) NOT IN ('admin','global admin')
+              AND COALESCE(is_global_admin,0)=0
+            ORDER BY username
+        """, (company_id,))
     else:
-        cur.execute("SELECT * FROM users ORDER BY username")
+        # Default: hide global admin accounts from the main listing
+        cur.execute("""
+            SELECT *
+            FROM users
+            WHERE LOWER(role) NOT IN ('admin','global admin')
+              AND COALESCE(is_global_admin,0)=0
+            ORDER BY username
+        """)
     rows = cur.fetchall()
     conn.close()
     return rows
