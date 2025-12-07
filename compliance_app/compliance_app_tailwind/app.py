@@ -336,10 +336,12 @@ def dashboard():
             }
 
         for c in companies_all:
-            users_for_company = [
-                u for u in db.admin_user_compliance(c["id"])
-                if str(u.get("role", "")).lower() not in ("admin", "global admin")
-            ]
+            users_for_company = []
+            for u in db.admin_user_compliance(c["id"]):
+                role_val = str(u["role"]).lower() if "role" in u.keys() else ""
+                if role_val in ("admin", "global admin"):
+                    continue
+                users_for_company.append(u)
             # store with int and string keys so template lookups always work
             company_user_rows[c["id"]] = users_for_company
             company_user_rows[str(c["id"])] = users_for_company
