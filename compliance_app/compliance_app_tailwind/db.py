@@ -681,13 +681,15 @@ def admin_update_user(user_id, username, password, role, first_name, last_name, 
     conn = get_connection()
     cur = conn.cursor()
     try:
+        # Track original company to clean up assignments if the company changes
+        cur.execute("SELECT role, company_id FROM users WHERE id=?", (user_id,))
+        current_row = cur.fetchone()
+        current_role = current_row[0] if current_row else None
+        current_company = current_row[1] if current_row else None
         # Prevent removing the last global admin
         if role != "admin":
             cur.execute("SELECT COUNT(*) FROM users WHERE role='admin'")
             total_admins = cur.fetchone()[0]
-            cur.execute("SELECT role FROM users WHERE id=?", (user_id,))
-            current_role_row = cur.fetchone()
-            current_role = current_role_row[0] if current_role_row else None
             if current_role == "admin" and total_admins <= 1:
                 return "At least one global admin is required."
         if password:
@@ -704,6 +706,25 @@ def admin_update_user(user_id, username, password, role, first_name, last_name, 
                 WHERE id=?
             """.format(company_clause=", company_id=?" if company_id is not None else ""),
             (username, role, first_name, last_name, email, mobile, 1 if send_notifications else 0, 1 if is_active else 0, company_id, user_id) if company_id is not None else (username, role, first_name, last_name, email, mobile, 1 if send_notifications else 0, 1 if is_active else 0, user_id))
+        # If the user changed companies, remove assignments that no longer apply and add the correct ones
+        if company_id is not None and company_id != current_company:
+            # Drop any assignments where the task's company does not match the new company (but keep global tasks)
+            cur.execute("""
+                DELETE FROM user_tasks
+                WHERE user_id=?
+                  AND task_id IN (
+                      SELECT id FROM tasks WHERE company_id IS NOT NULL AND company_id != ?
+                  )
+            """, (user_id, company_id))
+            # Assign missing tasks for the new company scope and global tasks
+            cur.execute("""
+                INSERT INTO user_tasks (user_id, task_id, status)
+                SELECT ?, t.id, 'pending'
+                FROM tasks t
+                LEFT JOIN user_tasks ut ON ut.user_id=? AND ut.task_id=t.id
+                WHERE ut.id IS NULL
+                  AND (t.company_id IS NULL OR t.company_id=0 OR t.company_id=?)
+            """, (user_id, user_id, company_id))
         conn.commit()
         return None
     except sqlite3.IntegrityError:
