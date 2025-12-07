@@ -1079,6 +1079,21 @@ def _assign_tasks_for_company(cur, company_id=None):
     - Global tasks (company_id NULL/0) -> all users or users in the given company.
     - Company tasks (company_id matches) -> users in that company.
     """
+    # Prune mismatched assignments where a company-specific task is assigned to a user from another company.
+    cur.execute("""
+        DELETE FROM user_tasks
+        WHERE id IN (
+            SELECT ut.id
+            FROM user_tasks ut
+            JOIN tasks t ON t.id = ut.task_id
+            JOIN users u ON u.id = ut.user_id
+            WHERE t.company_id IS NOT NULL
+              AND u.company_id IS NOT NULL
+              AND t.company_id != u.company_id
+              AND (? IS NULL OR t.company_id = ? OR u.company_id = ?)
+        )
+    """, (company_id, company_id, company_id))
+
     if company_id is None:
         # Global tasks to all users
         cur.execute("""
