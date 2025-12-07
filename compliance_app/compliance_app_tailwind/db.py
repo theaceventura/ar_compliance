@@ -690,6 +690,8 @@ def admin_user_compliance(company_id):
     conn = get_connection()
     cur = conn.cursor()
     _assign_tasks_for_company(cur, company_id)
+    # Exclude global admins from per-company rollups, even if the role label was
+    # stored as "Global Admin" instead of the canonical "admin".
     if company_id is None:
         cur.execute("""
             SELECT users.id, users.username, users.role, users.first_name, users.last_name,
@@ -704,6 +706,7 @@ def admin_user_compliance(company_id):
             LEFT JOIN user_tasks ON users.id = user_tasks.user_id
             LEFT JOIN tasks ON tasks.id = user_tasks.task_id
             WHERE (tasks.company_id = users.company_id OR tasks.company_id IS NULL)
+              AND LOWER(users.role) NOT IN ('admin', 'global admin')
             GROUP BY users.id, users.username, users.role, users.first_name, users.last_name
             ORDER BY users.username
         """)
@@ -721,7 +724,7 @@ def admin_user_compliance(company_id):
             LEFT JOIN user_tasks ON users.id = user_tasks.user_id
             LEFT JOIN tasks ON tasks.id = user_tasks.task_id
             WHERE users.company_id=?
-              AND users.role!='admin'
+              AND LOWER(users.role) NOT IN ('admin', 'global admin')
               AND (tasks.company_id = users.company_id OR tasks.company_id IS NULL)
             GROUP BY users.id, users.username, users.role, users.first_name, users.last_name
             ORDER BY users.username
