@@ -1174,6 +1174,8 @@ def admin_task_completion_rollup(company_id=None):
             JOIN users u ON u.id = ut.user_id
             JOIN tasks t ON t.id = ut.task_id
             WHERE (t.company_id IS NULL OR t.company_id = u.company_id)
+              AND LOWER(u.role) NOT IN ('admin','global admin')
+              AND COALESCE(u.is_global_admin,0)=0
             GROUP BY ut.task_id
         """)
     else:
@@ -1187,6 +1189,8 @@ def admin_task_completion_rollup(company_id=None):
             JOIN tasks t ON t.id = ut.task_id
             WHERE u.company_id=?
               AND (t.company_id IS NULL OR t.company_id = u.company_id)
+              AND LOWER(u.role) NOT IN ('admin','global admin')
+              AND COALESCE(u.is_global_admin,0)=0
             GROUP BY ut.task_id
         """, (company_id,))
     rows = cur.fetchall()
