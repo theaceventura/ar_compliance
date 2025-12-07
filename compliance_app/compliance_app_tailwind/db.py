@@ -1,7 +1,10 @@
 import sqlite3
 from datetime import datetime
+from pathlib import Path
 
-DB_NAME = "compliance.db"
+# Anchor the database to the project root so it is consistent regardless of the
+# working directory (e.g., when running from an IDE).
+DB_NAME = str(Path(__file__).resolve().parents[2] / "compliance.db")
 
 
 def get_connection():
