@@ -153,27 +153,39 @@
     </div>
 </div>
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-    // User metric filters -> filter table rows
-    const metricButtons = document.querySelectorAll('[data-user-filter]');
-    const userRows = document.querySelectorAll('.user-status-row');
-    const statusSection = document.getElementById('user-status');
-    function applyUserFilter(mode) {
-        userRows.forEach(row => {
-            const pending = parseInt(row.dataset.pending || '0', 10);
-            const overdue = parseInt(row.dataset.overdue || '0', 10);
-            let show = true;
-            if (mode === 'complete') {
-                show = pending === 0 && overdue === 0;
-            } else if (mode === 'pending') {
-                show = pending > 0;
-            } else if (mode === 'overdue') {
-                show = overdue > 0;
+    document.addEventListener('DOMContentLoaded', () => {
+        // User metric filters -> filter table rows
+        const metricButtons = document.querySelectorAll('[data-user-filter]');
+        const userRows = Array.from(document.querySelectorAll('.user-status-row'));
+        const statusSection = document.getElementById('user-status');
+        // Limit visible rows to 5 by default
+        const defaultLimit = 5;
+        userRows.forEach((row, idx) => {
+            if (idx >= defaultLimit) {
+                row.classList.add('hidden');
             }
-            row.style.display = show ? '' : 'none';
         });
-        statusSection?.scrollIntoView({ behavior: 'smooth' });
-    }
+        function applyUserFilter(mode) {
+            userRows.forEach((row, idx) => {
+                const pending = parseInt(row.dataset.pending || '0', 10);
+                const overdue = parseInt(row.dataset.overdue || '0', 10);
+                let show = true;
+                if (mode === 'complete') {
+                    show = pending === 0 && overdue === 0;
+                } else if (mode === 'pending') {
+                    show = pending > 0;
+                } else if (mode === 'overdue') {
+                    show = overdue > 0;
+                }
+                // Preserve default limit for any filter: show matches but keep only first 5 visible
+                if (show) {
+                    row.classList.toggle('hidden', idx >= defaultLimit);
+                } else {
+                    row.classList.add('hidden');
+                }
+            });
+            statusSection?.scrollIntoView({ behavior: 'smooth' });
+        }
     metricButtons.forEach(btn => {
         btn.addEventListener('click', () => applyUserFilter(btn.dataset.userFilter || 'all'));
     });
