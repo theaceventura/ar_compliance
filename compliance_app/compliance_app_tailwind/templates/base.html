@@ -52,10 +52,10 @@
 <body class="bg-slate-100">
     <nav class="bg-white shadow mb-6">
         <div class="max-w-4xl mx-auto px-4 py-3 flex justify-between items-center">
-            <div class="flex items-center space-x-3">
+            <div class="flex flex-col">
                 <a href="/" class="font-semibold hover:underline">Compliance Tracker</a>
                 {% if app_settings.show_user_banner and current_user_banner %}
-                    <span class="text-[11px] text-slate-600">
+                    <span class="text-[10px] text-slate-600 leading-tight">
                         Logged in User: {{ current_user_banner.display_name }} ({{ current_user_banner.role_label }})
                     </span>
                 {% endif %}
