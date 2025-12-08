@@ -23,7 +23,6 @@
                 <option value="{{ c.id }}" {% if selected_company_id == c.id %}selected{% endif %}>{{ c.name }}</option>
             {% endfor %}
         </select>
-        <button class="bg-blue-600 text-white px-3 py-1 rounded">Apply</button>
     </form>
     {% else %}
     <div class="flex items-center space-x-3">
@@ -150,7 +149,19 @@
         {% for row in company_table_rows %}
             {% set warn = row.unassigned and row.unassigned > 0 %}
             {% set is_selected = selected_company_id is not none and row.company_id == selected_company_id %}
-            <div class="tbl-row text-sm grid grid-cols-[2.5fr,0.65fr,0.9fr,0.9fr,0.9fr,0.9fr,0.9fr,1.15fr] gap-2 items-center {% if loop.index0 % 2 == 1 %}tbl-row-alt{% endif %} {{ 'bg-amber-50 border border-amber-200' if warn else '' }} {{ 'ring-2 ring-blue-300' if is_selected else '' }} cursor-pointer" data-company-row data-company-id="{{ row.company_id }}">
+            {% set base_class = 'tbl-row text-sm grid grid-cols-[2.5fr,0.65fr,0.9fr,0.9fr,0.9fr,0.9fr,0.9fr,1.15fr] gap-2 items-center cursor-pointer' %}
+            {% set status_class = '' %}
+            {% if row.tasks_overdue > 0 %}
+                {% set status_class = 'bg-red-50 border border-red-200' %}
+            {% elif row.tasks_pending > 0 %}
+                {% set status_class = 'bg-amber-50 border border-amber-200' %}
+            {% else %}
+                {% set status_class = 'bg-green-50 border border-green-200' %}
+            {% endif %}
+            {% set alt_class = 'tbl-row-alt' if loop.index0 % 2 == 1 else '' %}
+            {% set highlight_class = 'ring-2 ring-blue-300' if is_selected else '' %}
+            {% set row_class = base_class ~ ' ' ~ alt_class ~ ' ' ~ status_class ~ ' ' ~ highlight_class %}
+            <div class="{{ row_class }}" data-company-row data-company-id="{{ row.company_id }}">
                 <div class="text-left font-semibold text-slate-800 text-blue-700 break-words whitespace-normal">
                     {{ row.name }}
                 </div>
@@ -165,12 +176,13 @@
             {% set users_for_company = company_user_rows.get(row.company_id) or company_user_rows.get(row.company_id|string) or [] %}
             <div id="company-users-{{ row.company_id }}" class="hidden border border-slate-200 rounded px-3 py-2 bg-slate-50 text-sm space-y-1">
                 {% if users_for_company and users_for_company|length > 0 %}
-                    <div class="tbl-header text-xs grid grid-cols-[1.4fr,1fr,1fr,1fr,1fr] gap-2 items-center">
+                    <div class="tbl-header text-xs grid grid-cols-[1.4fr,1fr,1fr,1fr,1fr,0.9fr] gap-2 items-center">
                         <div class="text-left">User</div>
                         <div class="text-center">Completed/Total</div>
                         <div class="text-center">Pending</div>
                         <div class="text-center">Overdue</div>
                         <div class="text-center">Status</div>
+                        <div class="text-center">Tasks</div>
                     </div>
                     {% for u in users_for_company %}
                         {% set total = u.total_tasks or 0 %}
@@ -178,7 +190,14 @@
                         {% set pending = (u.pending_tasks or (total - completed)) %}
                         {% set overdue = u.overdue_tasks or 0 %}
                         {% set row_class = loop.index0 % 2 == 1 and 'tbl-row-alt' or '' %}
-                        <div class="tbl-row text-xs grid grid-cols-[1.4fr,1fr,1fr,1fr,1fr] gap-2 items-center {{ row_class }}">
+                        {% if overdue > 0 %}
+                            {% set row_class = row_class ~ ' bg-red-50 border border-red-200' %}
+                        {% elif pending > 0 %}
+                            {% set row_class = row_class ~ ' bg-amber-50 border border-amber-200' %}
+                        {% else %}
+                            {% set row_class = row_class ~ ' bg-green-50 border border-green-200' %}
+                        {% endif %}
+                        <div class="tbl-row text-xs grid grid-cols-[1.4fr,1fr,1fr,1fr,1fr,0.9fr] gap-2 items-center {{ row_class }}">
                             <div class="text-left truncate">{{ u.first_name or '' }} {{ u.last_name or '' }} ({{ u.username }})</div>
                             <div class="text-center text-green-700">{{ completed }}/{{ total }}</div>
                             <div class="text-center text-amber-700">{{ pending }}</div>
@@ -190,6 +209,13 @@
                                     <span class="text-amber-700 font-semibold">Pending</span>
                                 {% else %}
                                     <span class="text-green-700 font-semibold">Complete</span>
+                                {% endif %}
+                            </div>
+                            <div class="text-center">
+                                {% if user.role == 'company_admin' %}
+                                    <a href="{{ url_for('company_admin_report', user_id=u.id) }}" class="text-blue-600 hover:underline">View Tasks</a>
+                                {% else %}
+                                    <a href="{{ url_for('admin_report', user_id=u.id) }}" class="text-blue-600 hover:underline">View Tasks</a>
                                 {% endif %}
                             </div>
                         </div>
@@ -345,17 +371,82 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+function filterUsers(list, f) {
+    let title;
+    let out = list || [];
+    if (typeof f === 'string') {
+        if (f === 'completed') {
+            out = out.filter(u => (u.pending_tasks || 0) === 0 && (u.total_tasks || 0) > 0);
+            title = 'Users Complete';
+        } else if (f === 'pending') {
+            out = out.filter(u => (u.pending_tasks || 0) > 0);
+            title = 'Users Pending';
+        } else if (f === 'overdue') {
+            out = out.filter(u => (u.overdue_tasks || 0) > 0);
+            title = 'Users Overdue';
+        } else {
+            title = 'All Users';
+        }
+    } else {
+        title = 'All Users';
+    }
+    return { list: out, title };
+}
+
+function filterTasks(list, f) {
+    let title = 'Task Summary';
+    let out = list || [];
+    if (typeof f === 'string') {
+        if (f === 'completed') {
+            out = out.filter(t => t.fully_completed);
+            title = 'Completed Tasks';
+        } else if (f === 'pending') {
+            out = out.filter(t => !t.fully_completed);
+            title = 'Pending Tasks';
+        } else if (f === 'overdue') {
+            out = out.filter(t => t.overdue);
+            title = 'Overdue Tasks';
+        } else if (f === 'unassigned') {
+            // build unassigned list from the provided task list to avoid relying on an external variable
+            out = out.filter(t => (t.assign_total || 0) === 0);
+            title = 'Unassigned Tasks';
+        } else {
+            title = 'All Tasks';
+        }
+    } else if (f && f.type === 'risk') {
+        const sev = f.severity || 'Unspecified';
+        const imp = f.impact || 'Unspecified';
+        out = out.filter(t => (t.severity || 'Unspecified') === sev && (t.impact || 'Unspecified') === imp);
+        title = 'Tasks: ' + sev + ' / ' + imp;
+    }
+    return { list: out, title };
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    // Smooth scroll/highlight helper for cards when clicking tiles
+    const highlightCard = (id) => {
+        document.querySelectorAll('.ring-highlight').forEach(el => el.classList.remove('ring-highlight'));
+        if (!id) return;
+        const el = document.getElementById(id);
+        if (el) {
+            el.classList.add('ring-highlight');
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    };
+
     const severityData = {{ severity_counts|map(attribute='count')|list|tojson }};
     const severityLabels = {{ severity_counts|map(attribute='label')|list|tojson }};
     const impactData = {{ impact_counts|map(attribute='count')|list|tojson }};
     const impactLabels = {{ impact_counts|map(attribute='label')|list|tojson }};
-        const completionData = [{{ task_counts.completed }}, {{ task_counts.pending }}, {{ task_counts.overdue }}];
-        const completionLabels = ["Completed", "Pending", "Overdue"];
+    const completionData = {{ [task_counts.completed, task_counts.pending, task_counts.overdue]|tojson }};
+    const completionLabels = ["Completed", "Pending", "Overdue"];
     const metricMode = "{{ metric_mode }}";
     const allTasks = {{ tasks|tojson }};
     const allUsers = {{ compliance|tojson }};
-    const unassignedTasks = {{ unassigned_details|default([])|tojson }};
+    const modal = document.getElementById('task-modal');
+    const modalContent = document.getElementById('task-modal-content');
+    const modalTitle = document.getElementById('task-modal-title');
+    const modalClose = document.getElementById('task-modal-close');
 
     const palette = ['#2563eb','#16a34a','#f59e0b','#ef4444','#8b5cf6','#0ea5e9'];
 
@@ -363,7 +454,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('[data-label-target]').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
-            const targetId = btn.getAttribute('data-label-target');
+            const targetId = btn.dataset.labelTarget;
             const span = document.getElementById(targetId);
             if (!span) return;
             const current = span.textContent.trim();
@@ -377,7 +468,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function makePie(ctxId, labels, data, colors) {
         const ctx = document.getElementById(ctxId);
         if (!ctx) return;
-        new Chart(ctx, {
+        const chart = new Chart(ctx, {
             type: 'pie',
             data: {
                 labels,
@@ -393,51 +484,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         });
+        return chart;
     }
 
-    makePie('severityChart', severityLabels, severityData, {{ severity_palette|tojson }});
-    makePie('impactChart', impactLabels, impactData, {{ impact_palette|tojson }});
-    makePie('completionChart', completionLabels, completionData, {{ completion_palette|tojson }});
+    // Parse palette JSON safely so template markers don't break JS parsing before rendering
+    const severityPalette = {{ severity_palette|default([])|tojson }};
+    const impactPalette = {{ impact_palette|default([])|tojson }};
+    const completionPalette = {{ completion_palette|default([])|tojson }};
 
-    // Task metric clicks -> scroll/highlight chart or table
-    const taskMetricButtons = document.querySelectorAll('[data-metric-target]');
-    function highlightCard(id) {
-        document.querySelectorAll('.ring-highlight').forEach(el => el.classList.remove('ring-highlight'));
-        if (!id) return;
-        const el = document.getElementById(id);
-        if (el) {
-            el.classList.add('ring-highlight');
-            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-    }
-    taskMetricButtons.forEach(btn => {
-        btn.addEventListener('click', () => highlightCard(btn.dataset.metricTarget));
-    });
-
-    // Task metric popup summaries
-    const modal = document.getElementById('task-modal');
-    const modalContent = document.getElementById('task-modal-content');
-    const modalTitle = document.getElementById('task-modal-title');
-    const modalClose = document.getElementById('task-modal-close');
-        function showTasks(filter) {
-            if (metricMode === 'user') {
+    makePie('severityChart', severityLabels, severityData, severityPalette);
+    makePie('impactChart', impactLabels, impactData, impactPalette);
+    makePie('completionChart', completionLabels, completionData, completionPalette);
+    // filterUsers moved to outer scope — use the implementation defined above
+    
+            // Move renderUserModal to outer DOMContentLoaded scope so it is not nested inside showTasks.
+            function renderUserModal(list, titleText) {
                 if (!modal || !modalContent) return;
-                let list = allUsers || [];
-                let titleText = 'User Summary';
-                if (typeof filter === 'string') {
-                    if (filter === 'completed') {
-                        list = list.filter(u => (u.pending_tasks || 0) === 0 && (u.total_tasks || 0) > 0);
-                        titleText = 'Users Complete';
-                    } else if (filter === 'pending') {
-                        list = list.filter(u => (u.pending_tasks || 0) > 0);
-                        titleText = 'Users Pending';
-                    } else if (filter === 'overdue') {
-                        list = list.filter(u => (u.overdue_tasks || 0) > 0);
-                        titleText = 'Users Overdue';
-                    } else {
-                        titleText = 'All Users';
-                    }
-                }
                 modalContent.innerHTML = '';
                 if (modalTitle) modalTitle.textContent = titleText;
                 const scrollWrap = document.createElement('div');
@@ -460,7 +522,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     list.forEach((u, idx) => {
                         const total = u.total_tasks || 0;
                         const completed = u.completed_tasks || 0;
-                        const pending = u.pending_tasks != null ? u.pending_tasks : Math.max(total - completed, 0);
+                        const pending = u.pending_tasks == null ? Math.max(total - completed, 0) : u.pending_tasks;
                         const overdue = u.overdue_tasks || 0;
                         sumTotal += total;
                         sumCompleted += completed;
@@ -470,13 +532,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         const row = document.createElement('div');
                         const base = idx % 2 === 0 ? 'bg-slate-50' : 'bg-slate-100/60';
                         row.className = `grid grid-cols-[220px,120px,90px,90px,120px] gap-2 items-center px-3 py-2 rounded text-center ${base}`;
-                        let statusHtml = '<span class="text-slate-700">No tasks</span>';
+                        let statusHtml;
                         if (overdue > 0) {
                             statusHtml = '<span class="text-red-700 font-semibold">Overdue</span>';
                         } else if (pending > 0) {
                             statusHtml = '<span class="text-amber-700 font-semibold">Pending</span>';
                         } else if (total > 0) {
                             statusHtml = '<span class="text-green-700 font-semibold">Complete</span>';
+                        }
+                        if (!statusHtml) {
+                            statusHtml = '<span class="text-slate-700">No tasks</span>';
                         }
                         const displayName = `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username || 'User';
                         row.innerHTML = `
@@ -488,124 +553,114 @@ document.addEventListener('DOMContentLoaded', () => {
                         `;
                         wrapper.appendChild(row);
                     });
+                } else {
+                    const p = document.createElement('p');
+                    p.className = 'text-sm text-slate-600 px-3 py-2';
+                    p.innerHTML = '<span data-label-id="modal-empty">No users found for this category.</span>';
+                    wrapper.appendChild(p);
+                }
+                scrollWrap.appendChild(wrapper);
+                modalContent.appendChild(scrollWrap);
+            }
+    
+            // Removed duplicate/broken renderTaskModal implementation that referenced undefined variables;
+            // the proper renderTaskModal is defined below.
+
+            // Helper: render a list of tasks into the modal
+            function renderTaskModal(list, titleText) {
+                if (!modal || !modalContent) return;
+                modalContent.innerHTML = '';
+                if (modalTitle) modalTitle.textContent = titleText;
+                const scrollWrap = document.createElement('div');
+                scrollWrap.className = 'overflow-x-auto';
+                const wrapper = document.createElement('div');
+                wrapper.className = 'space-y-2 text-sm min-w-[590px]';
+                const header = document.createElement('div');
+                header.className = 'grid grid-cols-[240px,120px,90px,140px,100px] gap-2 items-center bg-slate-100 px-3 py-2 rounded font-semibold text-slate-700 text-center';
+                header.innerHTML = `
+                    <div class="text-left"><span data-label-id="modal-col-task">Task</span></div>
+                    <div class="text-center"><span data-label-id="modal-col-type">Task Type</span></div>
+                    <div class="text-center"><span data-label-id="modal-col-percent">% Complete</span></div>
+                    <div class="text-center"><span data-label-id="modal-col-users">No. Users Assigned</span></div>
+                    <div class="text-center"><span data-label-id="modal-col-status">Status</span></div>
+                `;
+                wrapper.appendChild(header);
+                if (list.length) {
+                    let totalAssignSum = 0, totalDoneSum = 0, completedTasks = 0, overdueTasks = 0;
+                    list.forEach((t, idx) => {
+                        const base = idx % 2 === 0 ? 'bg-slate-50' : 'bg-slate-100/60';
+                        const row = document.createElement('div');
+                        const overdue = t.overdue ? 'bg-red-50 border border-red-200' : base;
+                        row.className = `grid grid-cols-[240px,120px,90px,140px,100px] gap-2 items-center px-3 py-2 rounded text-center ${overdue}`;
+                        const totalAssign = t.assign_total || 0;
+                        const done = t.assign_completed || 0;
+                        const pct = t.completion_pct || 0;
+                        totalAssignSum += totalAssign;
+                        totalDoneSum += done;
+                        if (t.fully_completed) completedTasks += 1;
+                        if (t.overdue) overdueTasks += 1;
+                        let flag;
+                        if (t.overdue) {
+                            flag = '<span class="text-red-700 font-semibold" data-label-id="modal-flag-overdue">Overdue</span>';
+                        } else if (t.fully_completed) {
+                            flag = '<span class="text-green-700 font-semibold" data-label-id="modal-flag-completed">Completed</span>';
+                        } else {
+                            flag = '<span class="text-amber-700 font-semibold" data-label-id="modal-flag-pending">Pending</span>';
+                        }
+                        const companyLabel = t.company_label ? t.company_label : 'Global';
+                        const companyDisplay = (companyLabel && companyLabel.toLowerCase() === 'global')
+                            ? '<span class="font-semibold">Global</span>'
+                            : companyLabel;
+                        row.innerHTML = `
+                            <div class="text-left text-sm font-semibold text-slate-900 truncate">${t.title || 'Untitled'}</div>
+                            <div class="text-center text-xs text-slate-700">${companyDisplay}</div>
+                            <div class="text-center text-xs text-slate-700">${pct}%</div>
+                            <div class="text-center text-xs text-slate-700">${done}/${totalAssign || 0}</div>
+                            <div class="text-center text-xs">${flag}</div>
+                        `;
+                        wrapper.appendChild(row);
+                    });
+                    const totalTasks = list.length;
+                    const avgPct = totalTasks ? Math.round((list.reduce((s, t) => s + (t.completion_pct || 0), 0) / totalTasks) * 10) / 10 : 0;
                     const totalsRow = document.createElement('div');
-                    totalsRow.className = 'grid grid-cols-[220px,120px,90px,90px,120px] gap-2 items-center px-3 py-2 rounded bg-slate-200 text-sm font-semibold text-slate-800 text-center';
-                    const userCompliancePct = list.length ? Math.round((completeUsers / list.length) * 1000) / 10 : 0;
+                    totalsRow.className = 'grid grid-cols-[240px,120px,90px,140px,100px] gap-2 items-center px-3 py-2 rounded bg-slate-200 text-sm font-semibold text-slate-800 text-center';
                     totalsRow.innerHTML = `
                         <div class="text-left">Totals</div>
-                        <div>${sumCompleted}/${sumTotal}</div>
-                        <div>${sumPending}</div>
-                        <div>${sumOverdue}</div>
-                        <div>${completeUsers}/${list.length} (${userCompliancePct}%)</div>
+                        <div class="text-center">${totalTasks} tasks</div>
+                        <div>${avgPct}% avg</div>
+                        <div>${totalDoneSum}/${totalAssignSum}</div>
+                        <div>${completedTasks}/${totalTasks} complete</div>
                     `;
                     wrapper.appendChild(totalsRow);
                 } else {
                     const p = document.createElement('p');
                     p.className = 'text-sm text-slate-600 px-3 py-2';
-                    p.textContent = 'No users found for this category.';
+                    p.innerHTML = '<span data-label-id="modal-empty">No tasks found for this category.</span>';
                     wrapper.appendChild(p);
                 }
                 scrollWrap.appendChild(wrapper);
                 modalContent.appendChild(scrollWrap);
+            }
+
+        // Main dispatcher
+        function showTasks(filter) {
+            if (metricMode === 'user') {
+                if (!modal || !modalContent) return;
+                const users = allUsers || [];
+                const filtered = filterUsers(users, filter);
+                renderUserModal(filtered.list, filtered.title);
                 modal.classList.remove('hidden');
                 return;
             }
+
             if (!modal || !modalContent) return;
-            let list = allTasks || [];
-            let titleText = 'Task Summary';
-            modalContent.innerHTML = '';
-            if (typeof filter === 'string') {
-                if (filter === 'completed') {
-                    list = list.filter(t => t.fully_completed);
-                    titleText = 'Completed Tasks';
-                } else if (filter === 'pending') {
-                    list = list.filter(t => !t.fully_completed);
-                    titleText = 'Pending Tasks';
-                } else if (filter === 'overdue') {
-                    list = list.filter(t => t.overdue);
-                    titleText = 'Overdue Tasks';
-                } else if (filter === 'unassigned') {
-                    list = (unassignedTasks && unassignedTasks.length) ? unassignedTasks : list.filter(t => (t.assign_total || 0) === 0);
-                    titleText = 'Unassigned Tasks';
-                } else {
-                    titleText = 'All Tasks';
-                }
-            } else if (filter && filter.type === 'risk') {
-                const sev = filter.severity || 'Unspecified';
-                const imp = filter.impact || 'Unspecified';
-                list = list.filter(t => (t.severity || 'Unspecified') === sev && (t.impact || 'Unspecified') === imp);
-                titleText = `Tasks: ${sev} / ${imp}`;
-            }
-            if (modalTitle) modalTitle.textContent = titleText;
-            const scrollWrap = document.createElement('div');
-            scrollWrap.className = 'overflow-x-auto';
-            const wrapper = document.createElement('div');
-            wrapper.className = 'space-y-2 text-sm min-w-[590px]';
-            const header = document.createElement('div');
-            header.className = 'grid grid-cols-[240px,120px,90px,140px,100px] gap-2 items-center bg-slate-100 px-3 py-2 rounded font-semibold text-slate-700 text-center';
-            header.innerHTML = `
-                <div class="text-left"><span data-label-id="modal-col-task">Task</span></div>
-                <div class="text-center"><span data-label-id="modal-col-type">Task Type</span></div>
-                <div class="text-center"><span data-label-id="modal-col-percent">% Complete</span></div>
-                <div class="text-center"><span data-label-id="modal-col-users">No. Users Assigned</span></div>
-                <div class="text-center"><span data-label-id="modal-col-status">Status</span></div>
-            `;
-            wrapper.appendChild(header);
-            if (list.length) {
-                let totalAssignSum = 0, totalDoneSum = 0, completedTasks = 0, overdueTasks = 0;
-                list.forEach((t, idx) => {
-                    const base = idx % 2 === 0 ? 'bg-slate-50' : 'bg-slate-100/60';
-                    const row = document.createElement('div');
-                    const overdue = t.overdue ? 'bg-red-50 border border-red-200' : base;
-                    row.className = `grid grid-cols-[240px,120px,90px,140px,100px] gap-2 items-center px-3 py-2 rounded text-center ${overdue}`;
-                    const totalAssign = t.assign_total || 0;
-                    const done = t.assign_completed || 0;
-                    const pct = t.completion_pct || 0;
-                    totalAssignSum += totalAssign;
-                    totalDoneSum += done;
-                    if (t.fully_completed) completedTasks += 1;
-                    if (t.overdue) overdueTasks += 1;
-                    const flag = t.overdue
-                        ? '<span class="text-red-700 font-semibold" data-label-id="modal-flag-overdue">Overdue</span>'
-                        : (t.fully_completed ? '<span class="text-green-700 font-semibold" data-label-id="modal-flag-completed">Completed</span>' : '<span class="text-amber-700 font-semibold" data-label-id="modal-flag-pending">Pending</span>');
-                    const companyLabel = t.company_label ? t.company_label : 'Global';
-                    const companyDisplay = (companyLabel && companyLabel.toLowerCase() === 'global')
-                        ? '<span class="font-semibold">Global</span>'
-                        : companyLabel;
-                    row.innerHTML = `
-                        <div class="text-left text-sm font-semibold text-slate-900 truncate">${t.title || 'Untitled'}</div>
-                        <div class="text-center text-xs text-slate-700">${companyDisplay}</div>
-                        <div class="text-center text-xs text-slate-700">${pct}%</div>
-                        <div class="text-center text-xs text-slate-700">${done}/${totalAssign || 0}</div>
-                        <div class="text-center text-xs">${flag}</div>
-                    `;
-                    wrapper.appendChild(row);
-                });
-                const totalTasks = list.length;
-                const pendingTasks = Math.max(totalTasks - completedTasks, 0);
-                const avgPct = totalTasks ? Math.round((list.reduce((s, t) => s + (t.completion_pct || 0), 0) / totalTasks) * 10) / 10 : 0;
-                const totalsRow = document.createElement('div');
-                totalsRow.className = 'grid grid-cols-[240px,120px,90px,140px,100px] gap-2 items-center px-3 py-2 rounded bg-slate-200 text-sm font-semibold text-slate-800 text-center';
-                totalsRow.innerHTML = `
-                    <div class="text-left">Totals</div>
-                    <div class="text-center">${totalTasks} tasks</div>
-                    <div>${avgPct}% avg</div>
-                    <div>${totalDoneSum}/${totalAssignSum}</div>
-                    <div>${completedTasks}/${totalTasks} complete</div>
-                `;
-                wrapper.appendChild(totalsRow);
-            } else {
-                const p = document.createElement('p');
-                p.className = 'text-sm text-slate-600 px-3 py-2';
-                p.innerHTML = '<span data-label-id="modal-empty">No tasks found for this category.</span>';
-                wrapper.appendChild(p);
-            }
-            scrollWrap.appendChild(wrapper);
-            modalContent.appendChild(scrollWrap);
+            const tasks = allTasks || [];
+            const filteredTasks = filterTasks(tasks, filter);
+            renderTaskModal(filteredTasks.list, filteredTasks.title);
             modal.classList.remove('hidden');
         }
-    document.querySelectorAll('[data-metric-target]').forEach(btn => {
-        btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-metric-target]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
             const target = btn.dataset.metricTarget;
             highlightCard(target);
             const summaryFilter = btn.dataset.summary || 'all';
@@ -619,8 +674,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Risk matrix cell clicks -> show tasks for that severity/impact
     document.querySelectorAll('[data-risk-cell]').forEach(cell => {
         cell.addEventListener('click', () => {
-            const sev = cell.getAttribute('data-severity');
-            const imp = cell.getAttribute('data-impact');
+            const sev = cell.dataset.severity;
+            const imp = cell.dataset.impact;
             showTasks({ type: 'risk', severity: sev, impact: imp });
         });
     });
@@ -649,10 +704,20 @@ document.addEventListener('DOMContentLoaded', () => {
     bindUnassigned(unassignedBtn);
     bindUnassigned(unassignedFooterBtn);
 
+    // Auto-expand company users panel when expand_company query param is present
+    const params = new URLSearchParams(window.location.search);
+    const expandCompany = params.get('expand_company');
+    if (expandCompany) {
+        const panel = document.getElementById(`company-users-${expandCompany}`);
+        if (panel) {
+            panel.classList.remove('hidden');
+        }
+    }
+
     // Company row expand/collapse
     document.querySelectorAll('[data-company-row]').forEach(row => {
         row.addEventListener('click', () => {
-            const cid = row.getAttribute('data-company-id');
+            const cid = row.dataset.companyId;
             if (!cid) return;
             const panel = document.getElementById(`company-users-${cid}`);
             if (panel) {

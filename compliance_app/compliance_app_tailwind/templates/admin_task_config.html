@@ -3,7 +3,12 @@
 {% block content %}
 <h2 class="text-xl font-semibold mb-4">Task Configuration</h2>
 
-<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<div class="mb-4 flex items-center space-x-3 text-sm">
+    <button type="button" data-tab="fields" class="tab-btn px-3 py-2 rounded border border-blue-600 text-blue-700 bg-blue-50 font-semibold">Task Fields</button>
+    <button type="button" data-tab="risk" class="tab-btn px-3 py-2 rounded border border-slate-200 text-slate-700 bg-white hover:border-blue-300">Risk Matrix Config</button>
+</div>
+
+<div id="tab-risk" class="space-y-6 tab-pane">
     <div class="bg-white shadow rounded relative" data-widget-id="task-config-impact-options">
         <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Impact options</div>
         <div class="p-4 space-y-2 text-sm">
@@ -79,13 +84,13 @@
     </div>
 </div>
 
-<div class="mt-8 bg-white shadow rounded relative" data-widget-id="task-config-field-descriptions">
+<div class="mt-8 bg-white shadow rounded relative tab-pane active" data-widget-id="task-config-field-descriptions" id="tab-fields">
     <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Task Field Descriptions</div>
     <form method="POST" action="/admin/task-config/fields" class="p-4 space-y-4">
         <div class="grid grid-cols-1 md:grid-cols-[1fr,120px] gap-3 items-center">
             <div>
-                <label class="block text-sm font-semibold text-slate-700 mb-1">Title</label>
-                <textarea name="title" class="w-full border p-2 rounded text-sm leading-tight" rows="1">{{ descriptions.title.description }}</textarea>
+                <label for="title" class="block text-sm font-semibold text-slate-700 mb-1">Title</label>
+                <textarea id="title" name="title" class="w-full border p-2 rounded text-sm leading-tight" rows="1">{{ descriptions.title.description }}</textarea>
             </div>
             <label class="inline-flex items-center space-x-2 text-sm text-slate-700">
                 <input type="checkbox" name="title_required" class="border rounded" {% if descriptions.title.required %}checked{% endif %}>
@@ -94,8 +99,8 @@
         </div>
         <div class="grid grid-cols-1 md:grid-cols-[1fr,120px] gap-3 items-center">
             <div>
-                <label class="block text-sm font-semibold text-slate-700 mb-1">Description</label>
-                <textarea name="description" class="w-full border p-2 rounded text-sm leading-tight" rows="1">{{ descriptions.description.description }}</textarea>
+                <label for="description" class="block text-sm font-semibold text-slate-700 mb-1">Description</label>
+                <textarea id="description" name="description" class="w-full border p-2 rounded text-sm leading-tight" rows="1">{{ descriptions.description.description }}</textarea>
             </div>
             <label class="inline-flex items-center space-x-2 text-sm text-slate-700">
                 <input type="checkbox" name="description_required" class="border rounded" {% if descriptions.description.required %}checked{% endif %}>
@@ -104,8 +109,8 @@
         </div>
         <div class="grid grid-cols-1 md:grid-cols-[1fr,120px] gap-3 items-center">
             <div>
-                <label class="block text-sm font-semibold text-slate-700 mb-1">Due date</label>
-                <textarea name="due_date" class="w-full border p-2 rounded text-sm leading-tight" rows="1">{{ descriptions.due_date.description }}</textarea>
+                <label for="due_date" class="block text-sm font-semibold text-slate-700 mb-1">Due date</label>
+                <textarea id="due_date" name="due_date" class="w-full border p-2 rounded text-sm leading-tight" rows="1">{{ descriptions.due_date.description }}</textarea>
             </div>
             <label class="inline-flex items-center space-x-2 text-sm text-slate-700">
                 <input type="checkbox" name="due_date_required" class="border rounded" {% if descriptions.due_date.required %}checked{% endif %}>
@@ -115,8 +120,8 @@
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="grid grid-cols-[1fr,120px] gap-3 items-center">
                 <div>
-                    <label class="block text-sm font-semibold text-slate-700 mb-1">Impact</label>
-                    <textarea name="impact" class="w-full border p-2 rounded text-sm leading-tight" rows="1">{{ descriptions.impact.description }}</textarea>
+                    <label for="impact" class="block text-sm font-semibold text-slate-700 mb-1">Impact</label>
+                    <textarea id="impact" name="impact" class="w-full border p-2 rounded text-sm leading-tight" rows="1">{{ descriptions.impact.description }}</textarea>
                 </div>
                 <label class="inline-flex items-center space-x-2 text-sm text-slate-700">
                     <input type="checkbox" name="impact_required" class="border rounded" {% if descriptions.impact.required %}checked{% endif %}>
@@ -125,8 +130,8 @@
             </div>
             <div class="grid grid-cols-[1fr,120px] gap-3 items-center">
                 <div>
-                    <label class="block text-sm font-semibold text-slate-700 mb-1">Severity</label>
-                    <textarea name="severity" class="w-full border p-2 rounded text-sm leading-tight" rows="1">{{ descriptions.severity.description }}</textarea>
+                    <label for="severity" class="block text-sm font-semibold text-slate-700 mb-1">Severity</label>
+                    <textarea id="severity" name="severity" class="w-full border p-2 rounded text-sm leading-tight" rows="1">{{ descriptions.severity.description }}</textarea>
                 </div>
                 <label class="inline-flex items-center space-x-2 text-sm text-slate-700">
                     <input type="checkbox" name="severity_required" class="border rounded" {% if descriptions.severity.required %}checked{% endif %}>
@@ -136,8 +141,8 @@
         </div>
         <div class="grid grid-cols-1 md:grid-cols-[1fr,120px] gap-3 items-center">
             <div>
-                <label class="block text-sm font-semibold text-slate-700 mb-1">Verification question</label>
-                <textarea name="verification_question" class="w-full border p-2 rounded text-sm leading-tight" rows="1">{{ descriptions.verification_question.description }}</textarea>
+                <label for="verification_question" class="block text-sm font-semibold text-slate-700 mb-1">Verification question</label>
+                <textarea id="verification_question" name="verification_question" class="w-full border p-2 rounded text-sm leading-tight" rows="1">{{ descriptions.verification_question.description }}</textarea>
             </div>
             <label class="inline-flex items-center space-x-2 text-sm text-slate-700">
                 <input type="checkbox" name="verification_question_required" class="border rounded" {% if descriptions.verification_question.required %}checked{% endif %}>
@@ -146,8 +151,8 @@
         </div>
         <div class="grid grid-cols-1 md:grid-cols-[1fr,120px] gap-3 items-center">
             <div>
-                <label class="block text-sm font-semibold text-slate-700 mb-1">Verification answer</label>
-                <textarea name="verification_answer" class="w-full border p-2 rounded text-sm leading-tight" rows="1">{{ descriptions.verification_answer.description }}</textarea>
+                <label for="verification_answer" class="block text-sm font-semibold text-slate-700 mb-1">Verification answer</label>
+                <textarea id="verification_answer" name="verification_answer" class="w-full border p-2 rounded text-sm leading-tight" rows="1">{{ descriptions.verification_answer.description }}</textarea>
             </div>
             <label class="inline-flex items-center space-x-2 text-sm text-slate-700">
                 <input type="checkbox" name="verification_answer_required" class="border rounded" {% if descriptions.verification_answer.required %}checked{% endif %}>
@@ -156,8 +161,8 @@
         </div>
         <div class="grid grid-cols-1 md:grid-cols-[1fr,120px] gap-3 items-center">
             <div>
-                <label class="block text-sm font-semibold text-slate-700 mb-1">Assignment</label>
-                <textarea name="assignment" class="w-full border p-2 rounded text-sm leading-tight" rows="1">{{ descriptions.assignment.description }}</textarea>
+                <label for="assignment" class="block text-sm font-semibold text-slate-700 mb-1">Assignment</label>
+                <textarea id="assignment" name="assignment" class="w-full border p-2 rounded text-sm leading-tight" rows="1">{{ descriptions.assignment.description }}</textarea>
             </div>
             <label class="inline-flex items-center space-x-2 text-sm text-slate-700">
                 <input type="checkbox" name="assignment_required" class="border rounded" {% if descriptions.assignment.required %}checked{% endif %}>
@@ -165,8 +170,56 @@
             </label>
         </div>
 
-        <button class="bg-blue-600 text-white px-4 py-2 rounded">Save Descriptions</button>
+        <div class="flex justify-end">
+            <button class="bg-blue-600 text-white px-4 py-2 rounded">Save Descriptions</button>
+        </div>
     </form>
 </div>
 
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const tabs = document.querySelectorAll('.tab-btn');
+    const tabFields = document.getElementById('tab-fields');
+    const tabRisk = document.getElementById('tab-risk');
+    if (!tabs.length) return;
+
+    function activate(tab) {
+        const target = tab.dataset.tab;
+        tabs.forEach(btn => {
+            const active = btn === tab;
+            btn.classList.toggle('bg-blue-50', active);
+            btn.classList.toggle('border-blue-600', active);
+            btn.classList.toggle('text-blue-700', active);
+            btn.classList.toggle('font-semibold', active);
+            btn.classList.toggle('border-slate-200', !active);
+            btn.classList.toggle('text-slate-700', !active);
+        });
+        // Hide both, then show the target using active class
+        tabFields?.classList.remove('active');
+        tabRisk?.classList.remove('active');
+        if (target === 'risk') {
+            tabRisk?.classList.add('active');
+        } else {
+            tabFields?.classList.add('active');
+        }
+    }
+
+    tabs.forEach(btn => {
+        btn.addEventListener('click', () => activate(btn));
+    });
+
+    // Ensure default state is Task Fields visible, Risk hidden
+    activate(document.querySelector('.tab-btn[data-tab="fields"]') || tabs[0]);
+});
+</script>
+{% endblock %}
+
+{% block extra_styles %}
+<style>
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+</style>
 {% endblock %}

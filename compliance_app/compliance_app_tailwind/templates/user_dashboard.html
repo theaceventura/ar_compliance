@@ -15,7 +15,7 @@
         </h2>
     </div>
     {% if not is_company_admin %}
-    <form method="GET" class="flex items-center space-x-2 text-sm">
+    <form method="GET" class="flex items-center space-x-2 text-sm" id="company-filter-form">
         <label for="companySelect" class="text-slate-700">Company:</label>
         <select id="companySelect" name="company_id" class="border rounded px-2 py-1">
             <option value="all" {% if selected_company_id is none %}selected{% endif %}>All companies</option>
@@ -23,7 +23,6 @@
                 <option value="{{ c.id }}" {% if selected_company_id == c.id %}selected{% endif %}>{{ c.name }}</option>
             {% endfor %}
         </select>
-        <button class="bg-blue-600 text-white px-3 py-1 rounded">Apply</button>
     </form>
     {% else %}
     <div class="flex items-center space-x-3">
@@ -99,8 +98,7 @@
             {% set pending = row.pending_tasks or (total - completed) %}
             {% set pct = (completed / total * 100) if total else 0 %}
             {% set overdue = row.overdue_tasks or 0 %}
-            {% set base_bg = 'bg-slate-50' if loop.index0 % 2 == 0 else 'bg-slate-100/60' %}
-            {% set row_class = base_bg %}
+            {% set row_class = 'bg-green-50 border border-green-200' %}
             {% if overdue > 0 %}
                 {% set row_class = 'bg-red-50 border border-red-200' %}
             {% elif pending > 0 %}
@@ -163,6 +161,12 @@
 </div>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
+    // Auto-submit company filter on change
+    const companySelect = document.getElementById('companySelect');
+    const companyForm = document.getElementById('company-filter-form');
+    if (companySelect && companyForm) {
+        companySelect.addEventListener('change', () => companyForm.submit());
+    }
     // User metric filters -> filter table rows
     const metricButtons = document.querySelectorAll('[data-user-filter]');
     const userRows = Array.from(document.querySelectorAll('.user-status-row'));

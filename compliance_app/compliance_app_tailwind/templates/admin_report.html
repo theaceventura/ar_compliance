@@ -1,27 +1,64 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h2 class="text-xl font-semibold mb-4">Report for {{ user.username }}</h2>
+<div class="max-w-7xl mx-auto bg-white shadow p-6 rounded relative space-y-5 w-full" data-widget-id="admin-user-report">
+    {% set back_company = user.company_id if user.company_id is not none else 'all' %}
+    <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div>
+            <h2 class="text-2xl font-semibold text-slate-900 leading-tight">Report for {{ user.username }}</h2>
+            {% if user.first_name or user.last_name %}
+                <div class="text-xs text-slate-500 mt-1">{{ user.first_name }} {{ user.last_name }}</div>
+            {% endif %}
+        </div>
+        <div class="flex items-center gap-2">
+            <a href="{{ url_for('dashboard', company_id=back_company, expand_company=back_company) }}" class="inline-flex items-center px-3 py-2 text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100">
+                ← Back to Dashboard
+            </a>
+            <a href="/admin/report/{{ user.id }}/csv" class="inline-flex items-center px-3 py-2 text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100">
+                Download CSV
+            </a>
+        </div>
+    </div>
 
-<div class="mb-4 text-sm">
-    <a href="/admin/report/{{ user.id }}/csv" class="text-blue-600 hover:underline">Download CSV</a>
-</div>
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm text-slate-700">
+        <div class="bg-slate-50 border border-slate-200 rounded p-3 shadow-sm text-center min-h-[80px] flex flex-col justify-center">
+            <div class="text-xs uppercase tracking-wide text-slate-500">Tasks</div>
+            <div class="mt-2 text-xl font-semibold text-slate-800">{{ tasks|length }}</div>
+        </div>
+        <div class="bg-green-50 border border-green-100 rounded p-3 shadow-sm text-center min-h-[80px] flex flex-col justify-center">
+            <div class="text-xs uppercase tracking-wide text-green-700">Completed</div>
+            <div class="mt-2 text-xl font-semibold text-green-800">
+                {{ tasks | selectattr('status','equalto','completed') | list | length }}
+            </div>
+        </div>
+        <div class="bg-amber-50 border border-amber-100 rounded p-3 shadow-sm text-center min-h-[80px] flex flex-col justify-center">
+            <div class="text-xs uppercase tracking-wide text-amber-700">Pending</div>
+            <div class="mt-2 text-xl font-semibold text-amber-800">
+                {{ tasks | rejectattr('status','equalto','completed') | list | length }}
+            </div>
+        </div>
+        <div class="bg-red-50 border border-red-100 rounded p-3 shadow-sm text-center min-h-[80px] flex flex-col justify-center">
+            <div class="text-xs uppercase tracking-wide text-red-700">Overdue</div>
+            <div class="mt-2 text-xl font-semibold text-red-800">
+                {{ tasks | selectattr('overdue') | list | length }}
+            </div>
+        </div>
+    </div>
 
-    <div class="bg-white shadow rounded relative" data-widget-id="admin-user-report">
-    <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">User task report</div>
-    <div class="p-4 space-y-2 text-sm overflow-x-auto">
-        <div class="tbl-header text-sm grid task-report-grid gap-2 items-center min-w-[820px]">
+    <div class="bg-slate-50 border border-slate-100 rounded p-3 space-y-2 text-sm overflow-x-auto">
+        <div class="tbl-header text-sm grid task-report-grid gap-2 items-center w-full min-w-0">
             <div class="text-center">Task No</div>
             <div class="text-left">Task</div>
             <div class="text-center">Task Type</div>
             <div class="text-center">Status</div>
             <div class="text-center">Due</div>
             <div class="text-center">Completed</div>
-            <div class="text-center">Open</div>
+            <div class="text-center">View Task</div>
         </div>
         {% if tasks %}
             {% for t in tasks %}
-                <div class="tbl-row grid task-report-grid gap-2 items-center text-sm min-w-[820px] {% if loop.index0 % 2 == 1 %}tbl-row-alt{% endif %} {% if t.status != 'completed' %}bg-amber-50 border border-amber-200{% endif %}">
+                {% set row_class = 'bg-green-50 border border-green-200' if t.status == 'completed' else ('bg-red-50 border border-red-200' if t.overdue else 'bg-amber-50 border border-amber-200') %}
+                <div class="tbl-row grid task-report-grid gap-2 items-center text-sm w-full {% if loop.index0 % 2 == 1 %}tbl-row-alt{% endif %} {{ row_class }}">
                     <div class="text-center text-xs text-slate-600">#{{ t.task_id }}</div>
                     <div class="text-left truncate">{{ t.title }}</div>
                     <div class="text-center text-xs text-slate-700">{{ t.task_type }}</div>
@@ -41,7 +78,7 @@
                         {% if t.completed_display %}{{ t.completed_display }}{% elif t.overdue %}<span class="text-red-700 font-semibold">Overdue</span>{% else %}—{% endif %}
                     </div>
                     <div class="text-center text-xs">
-                        <a href="/task/{{ t.task_id }}?user_id={{ user.id }}" class="text-blue-600 hover:underline">Open task</a>
+                        <a href="/task/{{ t.task_id }}?user_id={{ user.id }}" class="text-blue-600 hover:underline">View</a>
                     </div>
                 </div>
             {% endfor %}
@@ -56,7 +93,7 @@
 {% block extra_styles %}
 <style>
     .task-report-grid {
-        grid-template-columns: 90px minmax(210px, 1.9fr) 1fr 0.9fr 1fr 1fr 0.9fr;
+        grid-template-columns: 80px minmax(260px, 2.1fr) 0.95fr 0.95fr 0.95fr 0.95fr 0.95fr;
     }
 </style>
 {% endblock %}

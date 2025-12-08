@@ -1,32 +1,90 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="max-w-xl bg-white shadow p-6 rounded relative" data-widget-id="user-task-detail">
+<div class="max-w-4xl mx-auto bg-white shadow p-6 rounded relative space-y-5" data-widget-id="user-task-detail">
 
-    <h2 class="text-xl font-semibold mb-2">{{ task.title }}</h2>
-    <div class="text-xs text-slate-500 mb-2">Task #{{ task.id }}</div>
-
-    {% if task.description %}
-        <p class="mb-2">{{ task.description }}</p>
-    {% endif %}
-
-    <div class="text-sm text-slate-600 mb-4 space-y-1">
-        <div>Status: <span class="{% if is_completed %}text-green-700{% else %}text-amber-700{% endif %} font-semibold">{{ "Completed" if is_completed else "Pending" }}</span></div>
-        {% if due_date_display %}<div>Due: {{ due_date_display }}</div>{% endif %}
-        {% if completed_at_display %}<div>Completed on: {{ completed_at_display }}</div>{% endif %}
-        <div class="space-x-2">
-            {% if task.impact %}<span class="inline-block px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs">Impact: {{ task.impact }}</span>{% endif %}
-            {% if task.severity %}<span class="inline-block px-2 py-1 bg-red-50 text-red-700 rounded text-xs">Severity: {{ task.severity }}</span>{% endif %}
+    <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div>
+            <h2 class="text-2xl font-semibold text-slate-900 leading-tight">{{ task.title }}</h2>
+        </div>
+        <div class="flex items-center gap-2">
+            {% if request.args.get("return") == "dashboard" %}
+                <a href="{{ url_for('dashboard') }}" class="inline-flex items-center px-3 py-2 text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100">
+                    ← Back to Tasks
+                </a>
+            {% elif request.args.get("user_id") %}
+                <a href="{{ url_for('admin_report', user_id=request.args.get('user_id')) }}" class="inline-flex items-center px-3 py-2 text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100">
+                    ← Back to Tasks
+                </a>
+            {% else %}
+                <a href="{{ url_for('dashboard') }}" class="inline-flex items-center px-3 py-2 text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100">
+                    ← Back to Tasks
+                </a>
+            {% endif %}
         </div>
     </div>
 
-    <p class="text-sm mb-4">{{ task.verification_question }}</p>
+    <div class="grid grid-cols-1 md:grid-cols-5 gap-3 text-sm text-slate-700">
+        {% set status_bg = 'bg-green-50 border-green-200 text-green-800' if is_completed else ('bg-amber-50 border-amber-200 text-amber-800') %}
+        <div class="border rounded p-3 shadow-sm text-center min-h-[80px] flex flex-col justify-center {{ status_bg }}">
+            <div class="text-xs uppercase tracking-wide text-slate-600">Status</div>
+            <div class="mt-2 text-xl font-semibold">
+                {{ "Completed" if is_completed else "Pending" }}
+            </div>
+        </div>
+        <div class="bg-slate-50 border border-slate-200 rounded p-3 shadow-sm text-center min-h-[80px] flex flex-col justify-center">
+            <div class="text-xs uppercase tracking-wide text-slate-500">Due Date</div>
+            <div class="mt-2 text-xl font-semibold text-slate-800">{{ due_date_display or "—" }}</div>
+        </div>
+        <div class="bg-slate-50 border border-slate-200 rounded p-3 shadow-sm text-center min-h-[80px] flex flex-col justify-center">
+            <div class="text-xs uppercase tracking-wide text-slate-500">Completed On</div>
+            <div class="mt-2 text-xl font-semibold text-slate-800">{{ completed_at_display or "—" }}</div>
+        </div>
+        <div class="bg-red-50 border border-red-100 rounded p-3 shadow-sm text-center min-h-[80px] flex flex-col justify-center">
+            <div class="text-xs uppercase tracking-wide text-red-700">Severity</div>
+            <div class="mt-2 text-xl font-semibold text-red-800">{{ task.severity or "Unspecified" }}</div>
+        </div>
+        <div class="bg-blue-50 border border-blue-100 rounded p-3 shadow-sm text-center min-h-[80px] flex flex-col justify-center">
+            <div class="text-xs uppercase tracking-wide text-blue-700">Impact</div>
+            <div class="mt-2 text-xl font-semibold text-blue-800">{{ task.impact or "Unspecified" }}</div>
+        </div>
+    </div>
 
-    <form method="POST" class="space-y-3">
-        <input name="answer" class="w-full border p-2 rounded" placeholder="Your answer" value="{{ task.answer_text or '' }}">
-        <p class="text-xs text-slate-500">Update and resubmit your answer to edit this task.</p>
-        <button class="bg-blue-600 text-white px-4 py-2 rounded">Save answer</button>
-    </form>
+    <div class="bg-slate-50 border border-slate-100 rounded p-4 space-y-3">
+        <div class="flex items-center gap-3 text-sm text-slate-700">
+            <div class="font-semibold text-slate-800 w-40 shrink-0 text-left">Task No</div>
+            <div class="text-slate-700">#{{ task.id }}</div>
+        </div>
+        <div class="flex items-center gap-3 text-sm text-slate-700">
+            <div class="font-semibold text-slate-800 w-40 shrink-0 text-left">Task Name</div>
+            <div class="text-slate-700">{{ task.title }}</div>
+        </div>
+        <div class="flex items-center gap-3 text-sm text-slate-700">
+            <div class="font-semibold text-slate-800 w-40 shrink-0 text-left">Task Type</div>
+            <div class="text-slate-700">
+                {% if task.company_name and task.company_id %}Company{% else %}Global{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-amber-50 border border-amber-200 rounded p-4 space-y-3 shadow-sm">
+        <div class="flex items-start gap-3 text-sm text-amber-900">
+            <div class="font-semibold w-40 shrink-0 text-left">Task Verification Text</div>
+            <p class="text-sm flex-1 font-semibold">{{ task.verification_question }}</p>
+        </div>
+        <form method="POST" class="space-y-3">
+            <div class="flex items-center gap-3">
+                <label class="text-sm font-medium w-40 shrink-0 text-left" for="answer">Your answer</label>
+                <input id="answer" name="answer" class="w-full border border-amber-300 p-2 rounded focus:outline-none focus:ring-2 focus:ring-amber-500" placeholder="Enter your answer" value="{{ task.answer_text or '' }}" {% if not can_edit %}disabled{% endif %}>
+            </div>
+            <div class="flex justify-end">
+                <button class="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded shadow text-sm font-semibold {% if not can_edit %}opacity-60 cursor-not-allowed{% endif %}" {% if not can_edit %}disabled{% endif %}>Save answer</button>
+            </div>
+        </form>
+        {% if not can_edit %}
+            <div class="text-xs text-amber-900 font-semibold">This task has been completed. Only Global Admin or Company Admin can edit it.</div>
+        {% endif %}
+    </div>
 
 </div>
 {% endblock %}

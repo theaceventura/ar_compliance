@@ -66,7 +66,7 @@ def inject_app_settings():
     def role_label(role):
         mapping = {
             "admin": "Admin",
-            "company_admin": "Company Admin",
+            "company_admin": "Admin",
             "user": "User",
         }
         return mapping.get(role, role)
@@ -723,11 +723,19 @@ def _format_due_and_overdue(due_str, today_date):
     """Return a tuple (overdue: bool, due_display: Optional[str]) for a due_date string."""
     if not due_str:
         return False, None
+    parsed_date = None
+    # First try plain date
     try:
-        due_obj = datetime.strptime(due_str, "%Y-%m-%d").date()
-        return (due_obj < today_date), due_obj.strftime(DATE_FMT)
+        parsed_date = datetime.strptime(due_str, "%Y-%m-%d").date()
     except ValueError:
-        return False, due_str
+        # Try ISO datetime strings
+        try:
+            parsed_date = datetime.fromisoformat(due_str).date()
+        except ValueError:
+            parsed_date = None
+    if parsed_date:
+        return (parsed_date < today_date), parsed_date.strftime(DATE_FMT)
+    return False, due_str
 
 def _format_completed_on(completed_raw):
     """Return a formatted completed date string or the raw value."""
@@ -755,23 +763,23 @@ def _personal_view(user):
 
     user_full = {**user}
     if profile_row:
-        user_full["first_name"] = profile_row.get("first_name")
-        user_full["last_name"] = profile_row.get("last_name")
+        user_full["first_name"] = profile_row["first_name"] if "first_name" in profile_row.keys() else None
+        user_full["last_name"] = profile_row["last_name"] if "last_name" in profile_row.keys() else None
 
     tasks = db.get_tasks_for_user(user["id"])
     today = date.today()
 
-    pending = [t for t in tasks if (t.get("status") or "") != "completed"]
-    completed = [t for t in tasks if (t.get("status") or "") == "completed"]
+    pending = [t for t in tasks if ((t["status"] if "status" in t.keys() else "") != "completed")]
+    completed = [t for t in tasks if ((t["status"] if "status" in t.keys() else "") == "completed")]
 
     pending_display = [
         {**t, "overdue": overdue, "due_display": due_display}
         for t in pending
-        for (overdue, due_display) in [ _format_due_and_overdue(t.get("due_date"), today) ]
+        for (overdue, due_display) in [ _format_due_and_overdue(t["due_date"] if "due_date" in t.keys() else None, today) ]
     ]
 
     completed_display = [
-        {**t, "completed_on": _format_completed_on(t.get("completed_at"))}
+        {**t, "completed_on": _format_completed_on(t["completed_at"] if "completed_at" in t.keys() else None)}
         for t in completed
     ]
 
@@ -782,8 +790,8 @@ def _personal_view(user):
     pending_non_overdue = max(pending_count - pending_overdue, 0)
     compliance_percent = round((completed_count / total_tasks) * 100, 1) if total_tasks else 0
 
-    severity_labels, severity_data = _tally([t.get("severity") for t in tasks])
-    impact_labels, impact_data = _tally([t.get("impact") for t in tasks])
+    severity_labels, severity_data = _tally([t["severity"] if "severity" in t.keys() else None for t in tasks])
+    impact_labels, impact_data = _tally([t["impact"] if "impact" in t.keys() else None for t in tasks])
     completion_data = [completed_count, pending_non_overdue, pending_overdue]
 
     settings_row = db.admin_get_app_settings()
@@ -832,18 +840,27 @@ def dashboard():
     return _personal_view(user)
 
 
-# Individual task view and answer submission
-@app.route("/task/<int:task_id>", methods=["GET", "POST"])
-@login_required
-def _resolve_acting_user_and_task(user, task_id):
+# Helper: resolve acting user/task when admin is acting for someone else.
+# Accepts either (user, task_id) or just (task_id,) to gracefully handle any stray calls.
+def _resolve_acting_user_and_task(user_or_task_id, task_id=None):
     """Return (acting_user_id, acting_user_row, task_row) and ensure assignments when needed."""
-    acting_user_id = user["id"]
+    if task_id is None:
+        # If only the task_id was passed, infer the current user.
+        task_id = user_or_task_id
+        user = current_user()
+    else:
+        user = user_or_task_id
+
+    acting_user_id = user["id"] if user else None
     acting_user = None
     override_user = request.args.get("user_id")
-    if override_user and user["role"] in ("admin", "company_admin"):
+    if override_user and user and user.get("role") in ("admin", "company_admin"):
         try:
             target_id = int(override_user)
-            target_row = db.admin_get_user(target_id, user.get("company_id") if user["role"] == "company_admin" else None)
+            target_row = db.admin_get_user(
+                target_id,
+                user.get("company_id") if user.get("role") == "company_admin" else None,
+            )
             if target_row:
                 acting_user_id = target_id
                 acting_user = target_row
@@ -859,23 +876,38 @@ def _resolve_acting_user_and_task(user, task_id):
 
 def _format_task_dates_for_template(t):
     """Return (completed_at_display, due_date_display) for template rendering."""
+    if t is None:
+        return None, None
+    # sqlite3.Row does not support .get; normalize to a dict for safe access.
+    if not isinstance(t, dict):
+        t = dict(t)
     completed_at_display = None
     due_date_display = None
-    if t and t.get("due_date"):
-        try:
-            due_dt = datetime.strptime(t["due_date"], "%Y-%m-%d")
-            due_date_display = due_dt.strftime(DATE_FMT)
-        except ValueError:
-            due_date_display = t["due_date"]
-    if t and t.get("completed_at"):
+    if t.get("due_date"):
+        due_display = t.get("due_date")
+        # Try common formats
+        for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f"):
+            try:
+                due_dt = datetime.strptime(t["due_date"], fmt)
+                due_display = due_dt.strftime(DATE_FMT)
+                break
+            except ValueError:
+                continue
+        due_date_display = due_display
+    if t.get("completed_at"):
+        comp_display = t.get("completed_at")
         try:
             completed_dt = datetime.fromisoformat(t["completed_at"])
-            completed_at_display = completed_dt.strftime(DATETIME_FMT)
+            comp_display = completed_dt.strftime(DATE_FMT)
         except ValueError:
-            completed_at_display = t["completed_at"]
+            pass
+        completed_at_display = comp_display
     return completed_at_display, due_date_display
 
 
+# Individual task view and answer submission
+@app.route("/task/<int:task_id>", methods=["GET", "POST"])
+@login_required
 def task_detail(task_id):
     """Display a single task and accept an answer submission."""
     user = current_user()
@@ -885,6 +917,16 @@ def task_detail(task_id):
     if t is None:
         return "Task not found", 404
 
+    # Normalize to a dict for safe .get access
+    if not isinstance(t, dict):
+        t = dict(t)
+
+    # Determine editability: completed tasks are read-only for regular users; admins can edit.
+    is_completed = t.get("status") == "completed"
+    can_edit = True
+    if is_completed and user.get("role") not in ("admin", "company_admin"):
+        can_edit = False
+
     if request.method == "GET":
         completed_at_display, due_date_display = _format_task_dates_for_template(t)
         return render_template(
@@ -892,12 +934,19 @@ def task_detail(task_id):
             task=t,
             completed_at_display=completed_at_display,
             due_date_display=due_date_display,
-            is_completed=t.get("status") == "completed",
+            is_completed=is_completed,
+            can_edit=can_edit,
             acting_user=acting_user,
             page_name="templates/task_detail.html",
         )
 
     # POST: accept an answer and record the result
+    if not can_edit:
+        flash("This task is already completed and cannot be edited.")
+        if acting_user:
+            return redirect(f"/admin/report/{acting_user_id}")
+        return redirect(url_for("dashboard"))
+
     user_answer = request.form.get("answer", "").strip()
     expected = (t.get("verification_answer") or "").strip()
     correct = user_answer.lower() == expected.lower()
@@ -954,9 +1003,9 @@ def _select_company_id_for_admin():
 
 def _compute_user_metrics_from_compliance(rows):
     total = len(rows)
-    completed = sum(1 for r in rows if (r.get("pending_tasks") or 0) == 0)
-    pending = sum(1 for r in rows if (r.get("pending_tasks") or 0) > 0)
-    overdue = sum(1 for r in rows if (r.get("overdue_tasks") or 0) > 0)
+    completed = sum(1 for r in rows if ((r["pending_tasks"] if "pending_tasks" in r.keys() else 0) == 0))
+    pending = sum(1 for r in rows if ((r["pending_tasks"] if "pending_tasks" in r.keys() else 0) > 0))
+    overdue = sum(1 for r in rows if ((r["overdue_tasks"] if "overdue_tasks" in r.keys() else 0) > 0))
     pct = round((completed / total) * 100, 1) if total else 0
     return {
         "total_users": total,
@@ -1399,7 +1448,7 @@ def _company_admin_build_context(company_id, selected_id, selected_user=None, us
     company_lookup = {company_row["id"]: company_row["name"]} if company_row else {}
     if user_task_counts is None:
         compliance_rows = db.admin_user_compliance(company_id)
-        user_task_counts = {r["id"]: (r.get("total_tasks") or 0) for r in compliance_rows}
+        user_task_counts = {r["id"]: (r["total_tasks"] if "total_tasks" in r.keys() else 0) for r in compliance_rows}
     unassigned_users_count = sum(1 for u in users if user_task_counts.get(u["id"], 0) == 0)
     return {
         "users": users,
@@ -1654,7 +1703,6 @@ def admin_add_option(opt_type):
 
 
 @app.route("/admin/options/<opt_type>/<int:option_id>/delete", methods=["POST"])
-@app.route("/admin/options/<opt_type>/<int:option_id>/delete", methods=["POST"])
 @admin_required
 def admin_delete_option(opt_type, option_id):
     """Remove an impact or severity option."""
@@ -1664,8 +1712,8 @@ def admin_delete_option(opt_type, option_id):
     db.admin_delete_option(opt_type, option_id, admin["company_id"])
     flash("Option removed.")
     return redirect(url_for("admin_tasks"))
-@app.route("/admin/options/<opt_type>/<int:option_id>/color", methods=["POST"])
-@admin_required
+
+
 @app.route("/admin/options/<opt_type>/<int:option_id>/color", methods=["POST"])
 @admin_required
 def admin_update_option_color(opt_type, option_id):
@@ -1794,6 +1842,8 @@ def admin_notify_overdue():
 
 # Admin: user report page
 def _format_admin_report_task(t):
+    if not isinstance(t, dict):
+        t = dict(t)
     due_display = t.get("due_date")
     if t.get("due_date"):
         try:
@@ -1808,19 +1858,35 @@ def _format_admin_report_task(t):
             completed_display = comp_dt.strftime(DATE_FMT)
         except ValueError:
             completed_display = t["completed_at"]
-    task_type = t["company_name"] if ("company_name" in t.keys() and t.get("company_id")) else "Global"
-    return {**t, "due_display": due_display, "completed_display": completed_display, "task_id": t["id"], "task_type": task_type}
+    if t.get("company_id"):
+        task_type = t.get("company_name") or "Company"
+    else:
+        task_type = "Global"
+    return {
+        **t,
+        "due_display": due_display,
+        "completed_display": completed_display,
+        "task_id": t["id"],
+        "task_type": task_type,
+    }
 
 @app.route("/admin/report/<int:user_id>")
-@admin_required
+@login_required
 def admin_report(user_id):
+    viewer = current_user()
+    if viewer.get("role") not in ("admin", "company_admin"):
+        return "Access denied", 403
+
     user_row, tasks = db.admin_get_user_report(user_id)
     if user_row is None:
         return USER_NOT_FOUND, 404
+    if not isinstance(user_row, dict):
+        user_row = dict(user_row)
 
-    admin_company_id = current_user().get("company_id")
-    if admin_company_id is not None and user_row.get("company_id") != admin_company_id:
-        return NOT_FOUND, 404
+    # company admins can only view users in their company
+    if viewer.get("role") == "company_admin":
+        if user_row.get("company_id") != viewer.get("company_id"):
+            return NOT_FOUND, 404
 
     formatted_tasks = [_format_admin_report_task(t) for t in tasks]
     return render_template("admin_report.html", user=user_row, tasks=formatted_tasks, page_name="templates/admin_report.html")
@@ -1857,27 +1923,14 @@ def company_admin_report(user_id):
     user_row, tasks = db.admin_get_user_report(user_id)
     if user_row is None:
         return USER_NOT_FOUND, 404
+    if not isinstance(user_row, dict):
+        user_row = dict(user_row)
+    tasks = [dict(t) for t in tasks]
     # Ensure company-admins can only view reports for users in their own company
     if user_row.get("company_id") != admin.get("company_id"):
         return NOT_FOUND, 404
 
-    formatted_tasks = []
-    for t in tasks:
-        due_display = t.get("due_date")
-        if t.get("due_date"):
-            try:
-                due_dt = datetime.strptime(t["due_date"], "%Y-%m-%d")
-                due_display = due_dt.strftime(DATE_FMT)
-            except ValueError:
-                due_display = t["due_date"]
-        completed_display = t.get("completed_at")
-        if t.get("completed_at"):
-            try:
-                comp_dt = datetime.fromisoformat(t["completed_at"])
-                completed_display = comp_dt.strftime(DATE_FMT)
-            except ValueError:
-                completed_display = t["completed_at"]
-        formatted_tasks.append({**t, "due_display": due_display, "completed_display": completed_display, "task_id": t["id"]})
+    formatted_tasks = [_format_admin_report_task(t) for t in tasks]
     return render_template("admin_report.html", user=user_row, tasks=formatted_tasks, page_name="templates/admin_report.html")
 
 

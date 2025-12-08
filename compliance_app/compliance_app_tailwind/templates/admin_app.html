@@ -89,7 +89,7 @@
 </div>
 
 <div class="bg-white shadow rounded max-w-xl mt-6 relative" data-widget-id="app-config-display-options">
-    <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Admin and Company Admin Task Display Options</div>
+    <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Admin Task Display Options</div>
     <form method="POST" class="p-4 space-y-2 text-sm">
         <div class="grid grid-cols-[1fr,180px] items-center px-3 py-2 rounded bg-slate-50 text-sm">
             <div class="text-left">Show Task Risk Charts</div>
@@ -108,11 +108,11 @@
             <div class="text-center space-y-1">
                 <label class="flex items-center justify-start gap-2 text-xs text-slate-700">
                     <input type="checkbox" name="show_user_charts_global" {% if settings.show_user_charts_global %}checked{% endif %} class="h-4 w-4">
-                    <span>Global Admin</span>
+                    <span>Admin</span>
                 </label>
                 <label class="flex items-center justify-start gap-2 text-xs text-slate-700">
                     <input type="checkbox" name="show_user_charts_company" {% if settings.show_user_charts_company %}checked{% endif %} class="h-4 w-4">
-                    <span>Company Admin</span>
+                    <span>Admin</span>
                 </label>
                 <label class="flex items-center justify-start gap-2 text-xs text-slate-700">
                     <input type="checkbox" name="show_user_charts_user" {% if settings.show_user_charts_user %}checked{% endif %} class="h-4 w-4">

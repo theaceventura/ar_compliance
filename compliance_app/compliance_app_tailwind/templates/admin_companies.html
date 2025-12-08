@@ -11,7 +11,6 @@
                 <input type="checkbox" name="show_inactive" value="1" {% if request.args.get('show_inactive') %}checked{% endif %} class="h-4 w-4">
                 <span>Show inactive</span>
             </label>
-            <button class="bg-blue-600 text-white px-3 py-1 rounded">Apply</button>
         </form>
     </div>
     <div class="p-4 space-y-2 text-sm">
@@ -117,8 +116,8 @@
     const submitCompanyBtn = document.getElementById('company-submit-btn');
     document.querySelectorAll('[data-company-select]').forEach(row => {
         row.addEventListener('click', () => {
-            const id = row.getAttribute('data-company-select');
-            if (id) window.location.href = `/admin/companies?company_id=${id}`;
+            const id = row.dataset.companySelect;
+            if (id) globalThis.location.href = `/admin/companies?company_id=${id}`;
         });
     });
     if (companyForm && newCompanyBtn) {
