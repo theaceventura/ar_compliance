@@ -139,6 +139,7 @@ def index():
 # Login page and submission
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    """Render the login form or authenticate the submitted credentials."""
     if request.method == "GET":
         user = current_user()
         if user is not None:
@@ -187,8 +188,8 @@ def logout():
     return redirect(url_for("login"))
 
 
-# Task dashboard: users see their tasks, admins see aggregate task stats
 def _parse_color_map(val):
+    """Convert a stored palette string like 'High:#f00,Low:#0f0' into a dict."""
     if not val:
         return {}
     mapping = {}
@@ -204,12 +205,14 @@ def _parse_color_map(val):
     return mapping
 
 def _palette_for_labels(labels, fallback, stored_map):
+    """Return a list of colors matching each label, using stored_map or fallback palette."""
     colors = []
     for idx, label in enumerate(labels):
         colors.append(stored_map.get(label, fallback[idx % len(fallback)]))
     return colors
 
 def _build_risk_matrix(task_list, severity_order=None, impact_order=None, severity_sort=True):
+    """Aggregate tasks into a severity x impact count matrix for the risk view."""
     severities = []
     impacts = []
     for t in task_list:
@@ -246,6 +249,7 @@ def _build_risk_matrix(task_list, severity_order=None, impact_order=None, severi
     }
 
 def _company_rollup_for_admin(company_id, company_name, unassigned_seen, unassigned_details):
+    """Summarize task completion for a single company and capture unassigned tasks."""
     company_tasks = db.admin_get_all_tasks(company_id)
     roll = db.admin_task_completion_rollup(company_id)
     rows = []
@@ -324,10 +328,12 @@ def _compute_totals(rows):
     }
 
 def _admin_get_metric_mode(req):
+    """Return 'task' or 'user' based on query param metric_mode (defaults to task)."""
     mode = req.args.get("metric_mode")
     return mode if mode in ("task", "user") else "task"
 
 def _admin_get_selected_company_id(req):
+    """Parse company_id from query params; None for all/blank/invalid, else int."""
     arg = req.args.get("company_id")
     if arg is None:
         return None
@@ -377,6 +383,7 @@ def _admin_build_tasks_json(tasks, rollup, selected_company_id):
     return tasks_out, unassigned
 
 def _admin_build_company_rows(companies_list, unassigned_seen, unassigned_details):
+    """Build per-company summaries and user rows for the admin/company tables."""
     summaries = []
     user_rows = {}
     for c in companies_list:
@@ -490,6 +497,7 @@ def _admin_view_prepare(selected_company_id):
 
 
 def _admin_view(user):
+    """Render the admin task dashboard (tasks/users/companies/risk) using prepared data."""
     # Thin orchestrator that delegates heavy lifting to helpers to reduce complexity.
     metric_mode = _admin_get_metric_mode(request)
     selected_company_id = _admin_get_selected_company_id(request)
@@ -720,7 +728,7 @@ def _company_admin_view(user):
     )
 
 def _format_due_and_overdue(due_str, today_date):
-    """Return a tuple (overdue: bool, due_display: Optional[str]) for a due_date string."""
+    """Return (is_overdue, due_display) for a due_date string, handling date/datetime."""
     if not due_str:
         return False, None
     parsed_date = None
@@ -758,6 +766,7 @@ def _tally(values):
     return labels, data
 
 def _personal_view(user):
+    """Render the regular user dashboard with their pending/completed tasks and charts."""
     profile_row = db.admin_get_user(user["id"], user.get("company_id"))
     db.ensure_user_assignments(user["id"], user.get("company_id"))
 
@@ -1018,7 +1027,7 @@ def _compute_user_metrics_from_compliance(rows):
 @app.route("/dashboard/users")
 @login_required
 def user_dashboard():
-    """User-focused dashboard showing user metrics and completion status."""
+    """User/company-admin view showing user-level metrics and compliance."""
     user = current_user()
     if user["role"] not in ("admin", "company_admin"):
         return "Access denied", 403
@@ -1434,6 +1443,7 @@ def admin_create_user():
 
 # Company admin: manage users for their company
 def _company_admin_build_context(company_id, selected_id, selected_user=None, users=None, user_task_counts=None):
+    """Build the company-admin user list context scoped to their company."""
     if users is None:
         users = db.admin_get_all_users(company_id)
 
@@ -1463,6 +1473,7 @@ def _company_admin_build_context(company_id, selected_id, selected_user=None, us
     }
 
 def _company_admin_collect_and_validate(company_id):
+    """Collect and validate fields when a company admin creates or updates a user."""
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "").strip()
     role = request.form.get("role", "user")
@@ -1506,6 +1517,7 @@ def _company_admin_collect_and_validate(company_id):
     }
 
 def _company_admin_perform_create_or_update(payload, company_id):
+    """Execute create/update for company-admin user actions; enforce company scope."""
     if payload["user_id"]:
         target = db.admin_get_user(payload["user_id"])
         if target and target.get("company_id") != company_id:
@@ -1873,6 +1885,7 @@ def _format_admin_report_task(t):
 @app.route("/admin/report/<int:user_id>")
 @login_required
 def admin_report(user_id):
+    """Admin/company-admin view of a single user's task report (role scoped)."""
     viewer = current_user()
     if viewer.get("role") not in ("admin", "company_admin"):
         return "Access denied", 403
@@ -1918,7 +1931,7 @@ def admin_report_csv(user_id):
 @app.route("/company-admin/report/<int:user_id>")
 @company_admin_required
 def company_admin_report(user_id):
-    """Company admin view of a user's report within their company."""
+    """Company admin report view scoped strictly to their company."""
     admin = current_user()
     user_row, tasks = db.admin_get_user_report(user_id)
     if user_row is None:
