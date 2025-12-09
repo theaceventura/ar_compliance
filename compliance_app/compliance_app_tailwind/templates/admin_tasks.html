@@ -39,11 +39,8 @@
                 <div class="text-center">Actions</div>
             </div>
             {% if tasks %}
-                {% set limit = 5 %}
-                {% set show_all = request.args.get('show') == 'all' %}
-                {% set page_tasks = tasks if show_all else tasks[:limit] %}
-                {% for t in page_tasks %}
-                    <div class="tbl-row grid grid-cols-[80px,3.5fr,2fr,1.1fr,1.1fr,1.2fr,1fr,1fr] gap-2 items-center text-sm {% if loop.index0 % 2 == 1 %}tbl-row-alt{% endif %} {% if t.overdue %}bg-red-50 border border-red-200{% endif %}">
+                {% for t in tasks %}
+                    <div class="task-row tbl-row grid grid-cols-[80px,3.5fr,2fr,1.1fr,1.1fr,1.2fr,1fr,1fr] gap-2 items-center text-sm {% if loop.index0 % 2 == 1 %}tbl-row-alt{% endif %} {% if t.overdue %}bg-red-50 border border-red-200{% endif %}">
                         <div class="text-xs text-slate-500 whitespace-nowrap text-center">#{{ t.id }}</div>
                         <div class="truncate text-left">
                             <a href="/admin/tasks?task_id={{ t.id }}&company_id={{ selected_company_id if selected_company_id is not none else 'all' }}&create_company_id={{ t.company_id or '' }}" class="text-blue-600 hover:underline truncate inline-block">{{ t.title }}</a>
@@ -68,20 +65,15 @@
                         </div>
                     </div>
                 {% endfor %}
-                {% if tasks|length > limit and not show_all %}
-                    <div class="flex items-center justify-between pt-2 text-xs text-slate-600">
-                        <span>Showing {{ limit }} of {{ tasks|length }}</span>
-                        <div class="space-x-2">
-                            <a href="?company_id={{ selected_company_id if selected_company_id is not none else 'all' }}&show=all" class="text-blue-600 hover:underline">Show all</a>
-                        </div>
-                    </div>
-                {% elif show_all %}
-                    <div class="flex items-center justify-end pt-2 text-xs text-slate-600">
-                        <a href="?company_id={{ selected_company_id if selected_company_id is not none else 'all' }}" class="text-blue-600 hover:underline">Show less</a>
-                    </div>
-                {% endif %}
                 <div class="flex justify-end mt-3">
                     <a href="/admin/tasks?new=1{% if selected_company_id is not none %}&company_id={{ selected_company_id }}&create_company_id={{ selected_company_id }}{% endif %}" class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">New Task</a>
+                </div>
+                <div id="task-table-controls" class="flex items-center justify-between text-xs text-slate-600 mt-2">
+                    <div id="task-table-status"></div>
+                    <div class="space-x-2">
+                        <button type="button" id="task-table-show-more" class="px-2 py-1 border rounded bg-white hover:bg-slate-50">Show more</button>
+                        <button type="button" id="task-table-show-all" class="px-2 py-1 border rounded bg-white hover:bg-slate-50">Show all</button>
+                    </div>
                 </div>
             {% else %}
                 <div class="tbl-empty text-sm">No tasks.</div>
@@ -109,36 +101,32 @@
             <form id="task-create-form" method="POST" class="p-4 space-y-2 text-sm">
                 {% if is_edit %}<input type="hidden" name="task_id" value="{{ edit_task.id }}">{% endif %}
                 <div class="grid grid-cols-[180px,1fr] items-center px-3 py-2 rounded bg-slate-50">
-                    <div class="text-left font-medium">Title / Due date</div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <div class="text-left font-medium">Title</div>
+                    <div class="grid grid-cols-1 md:grid-cols-[2fr,1fr] gap-2 items-center">
                         <div>
-                            <div class="text-xs text-slate-500 mb-1">{{ descriptions.title.description }}</div>
                             <input name="title" placeholder="Title" value="{{ edit_task.title if is_edit else '' }}" class="w-full border p-2 rounded">
                         </div>
-                        <div>
-                            <div class="text-xs text-slate-500 mb-1">{{ descriptions.due_date.description }}</div>
-                            <input name="due_date" type="date" value="{{ edit_task.due_date if is_edit else '' }}" class="w-full border p-2 rounded">
+                        <div class="flex justify-end items-center gap-2">
+                            <span class="text-sm text-slate-700 whitespace-nowrap">Due Date</span>
+                            <input name="due_date" type="date" value="{{ edit_task.due_date if is_edit else '' }}" class="border p-2 rounded w-48">
                         </div>
                     </div>
                 </div>
                 <div class="grid grid-cols-[180px,1fr] items-center px-3 py-2 rounded bg-slate-100/60">
                     <div class="text-left font-medium">Description</div>
                     <div>
-                        <div class="text-xs text-slate-500 mb-1">{{ descriptions.description.description }}</div>
                         <input name="description" placeholder="Description" value="{{ edit_task.description if is_edit else '' }}" class="w-full border p-2 rounded">
                     </div>
                 </div>
                 <div class="grid grid-cols-[180px,1fr] items-center px-3 py-2 rounded bg-slate-50">
                     <div class="text-left font-medium">Verification question</div>
                     <div>
-                        <div class="text-xs text-slate-500 mb-1">{{ descriptions.verification_question.description }}</div>
                         <input name="verification_question" value="{{ edit_task.verification_question if is_edit else '' }}" placeholder="Verification question" class="w-full border p-2 rounded">
                     </div>
                 </div>
                 <div class="grid grid-cols-[180px,1fr] items-center px-3 py-2 rounded bg-slate-100/60">
                     <div class="text-left font-medium">Verification answer</div>
                     <div>
-                        <div class="text-xs text-slate-500 mb-1">{{ descriptions.verification_answer.description }}</div>
                         <input name="verification_answer" value="{{ edit_task.verification_answer if is_edit else '' }}" placeholder="Correct answer" class="w-full border p-2 rounded">
                     </div>
                 </div>
@@ -202,8 +190,8 @@
     {% endif %}
 
 <script>
-    const isEdit = {{ 'true' if edit_task else 'false' }};
-    const isNew = {{ 'true' if request.args.get('new') else 'false' }};
+const isEdit = {{ 'true' if edit_task else 'false' }};
+const isNew = {{ 'true' if request.args.get('new') else 'false' }};
     const filterForm = document.getElementById('admin-tasks-filter-form');
     const filterCompany = document.getElementById('filterCompany');
     if (filterForm && filterCompany) {
@@ -300,6 +288,35 @@
         localStorage.removeItem(persistKey);
     }
     toggleAssignments();
+
+    // Table row limiter (match admin_users style)
+    const taskRows = Array.from(document.querySelectorAll('.task-row'));
+    const taskLimit = 5;
+    const taskStatus = document.getElementById('task-table-status');
+    const showMoreBtn = document.getElementById('task-table-show-more');
+    const showAllBtn = document.getElementById('task-table-show-all');
+    function updateTaskVisibility(showAll=false) {
+        taskRows.forEach((r, idx) => {
+            if (showAll || idx < taskLimit) {
+                r.classList.remove('hidden');
+            } else {
+                r.classList.add('hidden');
+            }
+        });
+        if (taskStatus) {
+            const visible = showAll ? taskRows.length : Math.min(taskRows.length, taskLimit);
+            taskStatus.textContent = taskRows.length
+                ? `Showing ${visible} of ${taskRows.length}`
+                : 'No tasks';
+        }
+    }
+    if (taskRows.length) {
+        updateTaskVisibility(false);
+        showMoreBtn?.addEventListener('click', () => updateTaskVisibility(false));
+        showAllBtn?.addEventListener('click', () => updateTaskVisibility(true));
+    } else if (taskStatus) {
+        taskStatus.textContent = 'No tasks';
+    }
 </script>
 
 {% endblock %}

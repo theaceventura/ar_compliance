@@ -5,7 +5,15 @@
 
     <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
-            <h2 class="text-2xl font-semibold text-slate-900 leading-tight">{{ task.title }}</h2>
+            {% set assigned_name = ((acting_user.first_name or '') ~ ' ' ~ (acting_user.last_name or '')) if acting_user else '' %}
+            {% set assigned_name = assigned_name.strip() or ((task.assigned_first_name or '') ~ ' ' ~ (task.assigned_last_name or '')).strip() %}
+            {% set assigned_name = assigned_name or task.assigned_username or task.owner_username or 'User' %}
+            <h2 class="text-2xl font-semibold text-slate-900 leading-tight">{{ assigned_name }} – {{ task.title }}</h2>
+            {% if session.role in ['admin', 'company_admin'] %}
+            <div class="text-xs text-red-600 mt-1 font-semibold">
+                View by: {{ (current_user_banner.display_name if current_user_banner else '') or session.username }}
+            </div>
+            {% endif %}
         </div>
         <div class="flex items-center gap-2">
             {% if request.args.get("return") == "dashboard" %}

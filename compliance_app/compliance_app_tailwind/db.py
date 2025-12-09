@@ -95,6 +95,15 @@ def _run_migrations(cur):
         ("tasks", "severity", "ALTER TABLE tasks ADD COLUMN severity TEXT"),
         ("tasks", "owner_user_id", "ALTER TABLE tasks ADD COLUMN owner_user_id INTEGER"),
         ("tasks", "company_id", "ALTER TABLE tasks ADD COLUMN company_id INTEGER", "UPDATE tasks SET company_id=1 WHERE company_id IS NULL"),
+        # extended task metadata for question library/risk
+        ("tasks", "question_type", "ALTER TABLE tasks ADD COLUMN question_type TEXT"),
+        ("tasks", "response_options", "ALTER TABLE tasks ADD COLUMN response_options TEXT"),
+        ("tasks", "impact_weight", "ALTER TABLE tasks ADD COLUMN impact_weight INTEGER"),
+        ("tasks", "severity_weight", "ALTER TABLE tasks ADD COLUMN severity_weight INTEGER"),
+        ("tasks", "risk_band", "ALTER TABLE tasks ADD COLUMN risk_band TEXT"),
+        ("tasks", "domain", "ALTER TABLE tasks ADD COLUMN domain TEXT"),
+        ("tasks", "alignment", "ALTER TABLE tasks ADD COLUMN alignment TEXT"),
+        ("tasks", "acs_alignment", "ALTER TABLE tasks ADD COLUMN acs_alignment TEXT"),
         # users table additions
         ("users", "first_name", "ALTER TABLE users ADD COLUMN first_name TEXT"),
         ("users", "last_name", "ALTER TABLE users ADD COLUMN last_name TEXT"),
@@ -307,8 +316,14 @@ def get_task_for_user(user_id, task_id):
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("""
-        SELECT tasks.*, user_tasks.status, user_tasks.answer_text, user_tasks.completed_at,
-               tasks.verification_answer
+        SELECT tasks.*,
+               user_tasks.status,
+               user_tasks.answer_text,
+               user_tasks.completed_at,
+               tasks.verification_answer,
+               users.username AS assigned_username,
+               users.first_name AS assigned_first_name,
+               users.last_name AS assigned_last_name
         FROM tasks
         JOIN user_tasks ON tasks.id=user_tasks.task_id
         JOIN users ON users.id = user_tasks.user_id
@@ -469,6 +484,18 @@ def admin_get_all_users(company_id=None):
               AND COALESCE(is_global_admin,0)=0
             ORDER BY username
         """)
+    rows = cur.fetchall()
+    conn.close()
+    return rows
+
+def admin_get_all_users_any(company_id=None):
+    """Return all users including admins, optionally filtered to a company."""
+    conn = get_connection()
+    cur = conn.cursor()
+    if company_id:
+        cur.execute("SELECT * FROM users WHERE company_id=? ORDER BY username", (company_id,))
+    else:
+        cur.execute("SELECT * FROM users ORDER BY username")
     rows = cur.fetchall()
     conn.close()
     return rows
@@ -1138,6 +1165,9 @@ def admin_get_user_report(user_id):
                tasks.due_date,
                tasks.company_id,
                companies.name AS company_name,
+               users.username AS assigned_username,
+               users.first_name AS assigned_first_name,
+               users.last_name AS assigned_last_name,
                user_tasks.status,
                user_tasks.completed_at,
                user_tasks.answer_text,

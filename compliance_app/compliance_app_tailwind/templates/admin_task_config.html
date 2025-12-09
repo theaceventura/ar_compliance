@@ -1,88 +1,9 @@
 {% extends "base.html" %}
 
+{% set show_risk = request.args.get('show_risk') == '1' %}
+
 {% block content %}
 <h2 class="text-xl font-semibold mb-4">Task Configuration</h2>
-
-<div class="mb-4 flex items-center space-x-3 text-sm">
-    <button type="button" data-tab="fields" class="tab-btn px-3 py-2 rounded border border-blue-600 text-blue-700 bg-blue-50 font-semibold">Task Fields</button>
-    <button type="button" data-tab="risk" class="tab-btn px-3 py-2 rounded border border-slate-200 text-slate-700 bg-white hover:border-blue-300">Risk Matrix Config</button>
-</div>
-
-<div id="tab-risk" class="space-y-6 tab-pane">
-    <div class="bg-white shadow rounded relative" data-widget-id="task-config-impact-options">
-        <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Impact options</div>
-        <div class="p-4 space-y-2 text-sm">
-            <div class="tbl-header text-sm grid grid-cols-[1fr,150px,130px] gap-2 items-center">
-                <div class="text-left">Impact</div>
-                <div class="text-center">Colour</div>
-                <div class="text-center">Actions</div>
-            </div>
-            {% if impacts %}
-                {% for opt in impacts %}
-                    {% set default = impact_colors.get(opt.value, '#16a34a') %}
-                    <div class="tbl-row text-sm grid grid-cols-[1fr,150px,130px] gap-2 items-center {% if loop.index0 % 2 == 1 %}tbl-row-alt{% endif %}">
-                        <div class="text-left font-medium truncate">{{ opt.value }}</div>
-                        <form method="POST" action="/admin/options/impact/{{ opt.id }}/color" class="flex items-center justify-center gap-2">
-                            <input type="color" name="color" value="{{ default }}" class="h-9 w-16 border rounded">
-                            <button class="bg-slate-200 text-slate-700 px-3 py-1 rounded text-xs">Update</button>
-                        </form>
-                        <form method="POST" action="/admin/options/impact/{{ opt.id }}/delete" class="text-center">
-                            <button class="text-red-600 text-sm">Remove</button>
-                        </form>
-                    </div>
-                {% endfor %}
-            {% else %}
-                <div class="tbl-empty text-sm">No impact options defined.</div>
-            {% endif %}
-            <form method="POST" action="/admin/options/impact/add" class="grid grid-cols-[1fr,150px,130px] gap-2 items-center bg-slate-50 px-3 py-2 rounded border border-slate-200">
-                <input name="value" placeholder="Add impact" class="w-full border p-2 rounded">
-                <div class="flex items-center justify-center gap-2">
-                    <input type="color" name="color" value="#16a34a" class="h-9 w-16 border rounded">
-                </div>
-                <div class="text-center">
-                    <button class="bg-slate-700 text-white px-3 py-2 rounded text-sm w-full">Add</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <div class="bg-white shadow rounded relative" data-widget-id="task-config-severity-options">
-        <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Severity options</div>
-        <div class="p-4 space-y-2 text-sm">
-            <div class="tbl-header text-sm grid grid-cols-[1fr,150px,130px] gap-2 items-center">
-                <div class="text-left">Severity</div>
-                <div class="text-center">Colour</div>
-                <div class="text-center">Actions</div>
-            </div>
-            {% if severities %}
-                {% for opt in severities %}
-                    {% set default = severity_colors.get(opt.value, '#2563eb') %}
-                    <div class="tbl-row text-sm grid grid-cols-[1fr,150px,130px] gap-2 items-center {% if loop.index0 % 2 == 1 %}tbl-row-alt{% endif %}">
-                        <div class="text-left font-medium truncate">{{ opt.value }}</div>
-                        <form method="POST" action="/admin/options/severity/{{ opt.id }}/color" class="flex items-center justify-center gap-2">
-                            <input type="color" name="color" value="{{ default }}" class="h-9 w-16 border rounded">
-                            <button class="bg-slate-200 text-slate-700 px-3 py-1 rounded text-xs">Update</button>
-                        </form>
-                        <form method="POST" action="/admin/options/severity/{{ opt.id }}/delete" class="text-center">
-                            <button class="text-red-600 text-sm">Remove</button>
-                        </form>
-                    </div>
-                {% endfor %}
-            {% else %}
-                <div class="tbl-empty text-sm">No severity options defined.</div>
-            {% endif %}
-            <form method="POST" action="/admin/options/severity/add" class="grid grid-cols-[1fr,150px,130px] gap-2 items-center bg-slate-50 px-3 py-2 rounded border border-slate-200">
-                <input name="value" placeholder="Add severity" class="w-full border p-2 rounded">
-                <div class="flex items-center justify-center gap-2">
-                    <input type="color" name="color" value="#2563eb" class="h-9 w-16 border rounded">
-                </div>
-                <div class="text-center">
-                    <button class="bg-slate-700 text-white px-3 py-2 rounded text-sm w-full">Add</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
 
 <div class="mt-8 bg-white shadow rounded relative tab-pane active" data-widget-id="task-config-field-descriptions" id="tab-fields">
     <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Task Field Descriptions</div>
@@ -185,6 +106,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const tabFields = document.getElementById('tab-fields');
     const tabRisk = document.getElementById('tab-risk');
     if (!tabs.length) return;
+    const urlParams = new URLSearchParams(window.location.search);
+    const showRisk = urlParams.get('show_risk') === '1';
 
     function activate(tab) {
         const target = tab.dataset.tab;
@@ -197,13 +120,17 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.classList.toggle('border-slate-200', !active);
             btn.classList.toggle('text-slate-700', !active);
         });
-        // Hide both, then show the target using active class
-        tabFields?.classList.remove('active');
-        tabRisk?.classList.remove('active');
+        // Hide both, then show the target using active class + toggle hidden
+        [tabFields, tabRisk].forEach(el => {
+            el?.classList.remove('active');
+            el?.classList.add('hidden');
+        });
         if (target === 'risk') {
             tabRisk?.classList.add('active');
+            tabRisk?.classList.remove('hidden');
         } else {
             tabFields?.classList.add('active');
+            tabFields?.classList.remove('hidden');
         }
     }
 
@@ -212,7 +139,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Ensure default state is Task Fields visible, Risk hidden
-    activate(document.querySelector('.tab-btn[data-tab="fields"]') || tabs[0]);
+    if (showRisk) {
+        const riskTab = document.querySelector('.tab-btn[data-tab="risk"]');
+        activate(riskTab || tabs[0]);
+    } else {
+        activate(document.querySelector('.tab-btn[data-tab="fields"]') || tabs[0]);
+    }
 });
 </script>
 {% endblock %}

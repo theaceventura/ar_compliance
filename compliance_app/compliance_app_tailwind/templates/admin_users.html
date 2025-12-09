@@ -1,16 +1,12 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h2 class="text-xl font-semibold mb-4">User Config</h2>
+<h2 class="text-xl font-semibold mb-4">User Admin</h2>
 
 <div class="bg-white shadow rounded mb-6 relative overflow-visible" data-widget-id="admin-users-list">
     <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700 flex items-center justify-between">
         <h3 class="font-semibold">Users</h3>
         <div class="flex items-center space-x-4">
-            <label class="inline-flex items-center space-x-2 text-sm text-slate-700">
-                <input type="checkbox" id="filterAdmins" data-role-target="company_admin" class="h-4 w-4">
-                <span>Show Company Admins only</span>
-            </label>
             {% if not is_company_admin %}
             <form method="GET" class="flex items-center space-x-2 text-sm" id="admin-users-filter-form">
                 <label for="userCompanyFilter" class="text-slate-700">Company:</label>
@@ -22,6 +18,10 @@
                 </select>
             </form>
             {% endif %}
+            <label class="inline-flex items-center space-x-2 text-sm text-slate-700">
+                <input type="checkbox" id="filterAdmins" data-role-target="company_admin" class="h-4 w-4">
+                <span>Show Admins</span>
+            </label>
         </div>
     </div>
     <div class="p-4 space-y-2 text-sm">
@@ -63,7 +63,7 @@
                         {% endif %}
                     </div>
                     <div class="text-center text-sm">
-                        <a href="/admin/users?user_id={{ u.id }}" class="text-blue-600 hover:underline">Edit</a>
+                        <a href="/admin/users?user_id={{ u.id }}{% if selected_company_id %}&company_id={{ selected_company_id }}{% endif %}" class="text-blue-600 hover:underline">Edit</a>
                     </div>
                     <div class="text-center text-sm">
                         {% if u.role == "user" %}
@@ -81,6 +81,9 @@
         {% else %}
             <div class="tbl-empty text-sm">No users found for this filter.</div>
         {% endif %}
+        <div class="flex justify-end mt-3">
+            <a href="/admin/users?new=1{% if selected_company_id %}&company_id={{ selected_company_id }}{% endif %}" class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm">New User</a>
+        </div>
         <div id="user-table-controls" class="flex items-center justify-between text-xs text-slate-600 mt-2">
             <div id="user-table-status"></div>
             <div class="space-x-2">
@@ -100,6 +103,8 @@
     <div class="bg-red-100 text-red-800 px-3 py-2 rounded mb-3">{{ error }}</div>
 {% endif %}
 
+{% set show_form = (selected_user is not none) or request.args.get('new') %}
+{% if show_form %}
 <div class="bg-white shadow rounded relative" data-widget-id="admin-users-form">
     <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700 flex items-center justify-between">
         <span>{{ selected_user and 'Edit user' or 'Add user' }}</span>
@@ -189,44 +194,18 @@
             </div>
         </div>
         <div class="flex items-center justify-end gap-2 px-3 pt-2">
-            <button id="new-user-btn" class="bg-slate-200 text-slate-700 px-4 py-2 rounded text-sm min-w-[100px]" type="button">New User</button>
+            <a href="/admin/users{% if selected_company_id %}?company_id={{ selected_company_id }}{% endif %}" class="px-3 py-2 rounded border text-sm text-slate-700 bg-white hover:bg-slate-50">Cancel</a>
             <button id="user-submit-btn" class="bg-blue-600 text-white px-4 py-2 rounded min-w-[140px]">{{ selected_user and 'Save' or 'Add User' }}</button>
         </div>
     </form>
 </div>
+{% endif %}
 
 <script>
     const userFilterForm = document.getElementById('admin-users-filter-form');
     const userCompanyFilter = document.getElementById('userCompanyFilter');
     if (userFilterForm && userCompanyFilter) {
         userCompanyFilter.addEventListener('change', () => userFilterForm.submit());
-    }
-
-    const form = document.getElementById('user-form');
-    const newBtn = document.getElementById('new-user-btn');
-    const submitBtn = document.getElementById('user-submit-btn');
-    const hasSelectedUser = JSON.parse('{{ (selected_user is not none) | tojson }}');
-    if (form && !hasSelectedUser) {
-        form.reset();
-        // Explicitly clear fields to avoid browser autofill of the current user
-        ['username','password','first_name','last_name','email','mobile'].forEach(name => {
-            const el = form.querySelector(`[name="${name}"]`);
-            if (el) el.value = '';
-        });
-        const roleSelect = form.querySelector('select[name="role"]');
-        if (roleSelect) roleSelect.selectedIndex = 0;
-        const companySelect = form.querySelector('select[name="company_id"]');
-        if (companySelect) companySelect.selectedIndex = 0;
-        const activeBox = form.querySelector('input[name="is_active"]');
-        if (activeBox) activeBox.checked = true;
-        const notifBox = form.querySelector('input[name="send_notifications"]');
-        if (notifBox) notifBox.checked = false;
-    }
-    if (newBtn) {
-        newBtn.addEventListener('click', () => {
-            // Reload without user_id to enter Add mode cleanly
-            globalThis.location.href = "/admin/users";
-        });
     }
 
     const filterCheckbox = document.getElementById('filterAdmins');

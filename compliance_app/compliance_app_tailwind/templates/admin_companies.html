@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h2 class="text-xl font-semibold mb-4">Company Config</h2>
+<h2 class="text-xl font-semibold mb-4">Company Admin</h2>
 
 <div class="bg-white shadow rounded mb-6 relative" data-widget-id="admin-companies-list">
     <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700 flex items-center justify-between">
@@ -23,7 +23,7 @@
         </div>
         {% if companies %}
             {% for c in companies %}
-                <div class="grid grid-cols-[70px,1fr,120px,120px,120px] gap-2 items-center tbl-row {% if loop.index0 % 2 == 0 %}tbl-row-bg{% else %}tbl-row-alt{% endif %} cursor-pointer" data-company-select="{{ c.id }}">
+                <div class="company-row grid grid-cols-[70px,1fr,120px,120px,120px] gap-2 items-center tbl-row {% if loop.index0 % 2 == 0 %}tbl-row-bg{% else %}tbl-row-alt{% endif %} cursor-pointer" data-company-select="{{ c.id }}">
                     <div class="text-center text-xs text-slate-600">{{ c.id }}</div>
                     <div class="text-left truncate text-slate-800 font-semibold">{{ c.name }}</div>
                     {% set active = active_user_counts.get(c.id, 0) %}
@@ -41,6 +41,16 @@
         {% else %}
             <div class="tbl-empty text-sm">No companies to show.</div>
         {% endif %}
+        <div class="flex justify-end mt-3">
+            <a href="/admin/companies?new=1" class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm">New Company</a>
+        </div>
+        <div id="company-table-controls" class="flex items-center justify-between text-xs text-slate-600 mt-2">
+            <div id="company-table-status"></div>
+            <div class="space-x-2">
+                <button type="button" id="company-table-show-more" class="px-2 py-1 border rounded bg-white hover:bg-slate-50">Show more</button>
+                <button type="button" id="company-table-show-all" class="px-2 py-1 border rounded bg-white hover:bg-slate-50">Show all</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -48,6 +58,8 @@
     <div class="bg-red-100 text-red-800 px-3 py-2 rounded mb-3">{{ error }}</div>
 {% endif %}
 
+{% set show_form = (selected_company is not none) or request.args.get('new') %}
+{% if show_form %}
 <div class="bg-white shadow rounded relative" data-widget-id="admin-companies-form">
     <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700 flex items-center justify-between">
         <span>{{ selected_company and 'Edit company' or 'Add company' }}</span>
@@ -104,29 +116,55 @@
             </div>
         </div>
         <div class="flex items-center justify-end gap-2 px-3 pt-2">
-            <button type="button" id="new-company-btn" class="bg-slate-200 text-slate-700 px-4 py-2 rounded text-sm min-w-[100px]">New Company</button>
+            <a href="/admin/companies" class="px-3 py-2 rounded border text-sm text-slate-700 bg-white hover:bg-slate-50">Cancel</a>
             <button id="company-submit-btn" class="bg-blue-600 text-white px-4 py-2 rounded min-w-[140px]">{{ selected_company and 'Update Company' or 'Add Company' }}</button>
         </div>
     </form>
 </div>
+{% endif %}
 
 <script>
     const companyForm = document.getElementById('company-form');
-    const newCompanyBtn = document.getElementById('new-company-btn');
-    const submitCompanyBtn = document.getElementById('company-submit-btn');
     document.querySelectorAll('[data-company-select]').forEach(row => {
         row.addEventListener('click', () => {
             const id = row.dataset.companySelect;
             if (id) globalThis.location.href = `/admin/companies?company_id=${id}`;
         });
     });
-    if (companyForm && newCompanyBtn) {
-        newCompanyBtn.addEventListener('click', () => {
-            companyForm.reset();
-            const hidden = companyForm.querySelector('input[name="company_id"]');
-            if (hidden) hidden.value = '';
-            if (submitCompanyBtn) submitCompanyBtn.textContent = 'Add Company';
+    const showInactiveCheckbox = document.querySelector('input[name="show_inactive"]');
+    if (showInactiveCheckbox) {
+        showInactiveCheckbox.addEventListener('change', () => {
+            showInactiveCheckbox.closest('form')?.submit();
         });
+    }
+
+    // Table limiter (match admin_users style)
+    const companyRows = Array.from(document.querySelectorAll('.company-row'));
+    const companyLimit = 5;
+    const companyStatus = document.getElementById('company-table-status');
+    const companyShowMore = document.getElementById('company-table-show-more');
+    const companyShowAll = document.getElementById('company-table-show-all');
+    function updateCompanyVisibility(showAll=false) {
+        companyRows.forEach((r, idx) => {
+            if (showAll || idx < companyLimit) {
+                r.classList.remove('hidden');
+            } else {
+                r.classList.add('hidden');
+            }
+        });
+        if (companyStatus) {
+            const visible = showAll ? companyRows.length : Math.min(companyRows.length, companyLimit);
+            companyStatus.textContent = companyRows.length
+                ? `Showing ${visible} of ${companyRows.length}`
+                : 'No companies';
+        }
+    }
+    if (companyRows.length) {
+        updateCompanyVisibility(false);
+        companyShowMore?.addEventListener('click', () => updateCompanyVisibility(false));
+        companyShowAll?.addEventListener('click', () => updateCompanyVisibility(true));
+    } else if (companyStatus) {
+        companyStatus.textContent = 'No companies';
     }
 </script>
 

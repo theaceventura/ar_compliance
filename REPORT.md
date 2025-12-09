@@ -95,3 +95,6 @@ function user_rollup(company_id):
 - Optional JSON/CSV import/export mode to mirror the basic storage requirement.
 - Email notifications for overdue tasks.
 - Automated tests (pytest) for rollups and assignment sync.
+
+## TODO (parked)
+- Planned task metadata expansion (question_type, response_options, impact_weight, severity_weight, risk_band, domain, alignment, acs_alignment) and Excel importer for Cyber_Readiness_Master_v2.xlsx. Deferred until design is finalized.
