@@ -23,6 +23,7 @@
                 <option value="{{ c.id }}" {% if selected_company_id == c.id %}selected{% endif %}>{{ c.name }}</option>
             {% endfor %}
         </select>
+        <input type="hidden" name="view" value="users">
     </form>
     {% else %}
     <div class="flex items-center space-x-3">
@@ -82,13 +83,12 @@
         </div>
     </div>
         <div class="p-3 space-y-2 text-sm">
-            <div class="tbl-header text-sm grid grid-cols-[180px,160px,120px,120px,100px,90px] gap-2 items-center">
+            <div class="tbl-header text-sm grid grid-cols-[200px,160px,120px,120px,120px] gap-2 items-center">
                 <div class="text-left"><span data-label-id="user-table-name">Name</span></div>
                 <div class="text-left"><span data-label-id="user-table-username">Username</span></div>
                 <div class="text-center"><span data-label-id="user-table-role">Role</span></div>
             <div class="text-center"><span data-label-id="user-table-completed">Completed / Total</span></div>
             <div class="text-center"><span data-label-id="user-table-status">Status</span></div>
-            <div class="text-center"><span data-label-id="user-table-report">Report</span></div>
         </div>
         {% if compliance %}
         <div id="user-rows" class="space-y-1">
@@ -104,8 +104,11 @@
             {% elif pending > 0 %}
                 {% set row_class = 'bg-amber-50 border border-amber-200' %}
             {% endif %}
-            <div class="user-status-row tbl-row text-sm grid grid-cols-[180px,160px,120px,120px,100px,90px] gap-2 items-center rounded {{ row_class }}" data-pending="{{ pending }}" data-overdue="{{ overdue }}">
-                <div class="text-left truncate">{{ row.first_name or '' }} {{ row.last_name or '' }}</div>
+            <div class="user-status-row tbl-row text-sm grid grid-cols-[200px,160px,120px,120px,120px] gap-2 items-center rounded {{ row_class }}" data-pending="{{ pending }}" data-overdue="{{ overdue }}" data-user-row data-user-id="{{ row.id }}">
+                <div class="text-left truncate flex items-center gap-2">
+                    <span class="inline-block transition-transform duration-150 text-slate-500" data-user-arrow="{{ row.id }}">▶</span>
+                    <span class="truncate">{{ row.first_name or '' }} {{ row.last_name or '' }}</span>
+                </div>
                 <div class="text-left truncate">{{ row.username }}</div>
                 <div class="text-center">{{ role_label(row.role) }}</div>
                 <div class="text-center">{{ completed }} / {{ total }}</div>
@@ -123,12 +126,58 @@
                         <span class="text-xs text-slate-600">({{ completed }})</span>
                     {% endif %}
                 </div>
-                <div class="text-center">
-                    {% if is_company_admin %}
-                        <a href="/company-admin/report/{{ row.id }}" class="text-blue-600 hover:underline">View</a>
-                    {% else %}
-                        <a href="/admin/report/{{ row.id }}" class="text-blue-600 hover:underline">View</a>
-                    {% endif %}
+            </div>
+            {% set tasks = user_tasks_map.get(row.id, []) %}
+            <div id="user-tasks-{{ row.id }}" class="hidden border border-slate-200 rounded px-3 py-2 bg-slate-50 text-xs text-slate-700 space-y-2">
+                {% if tasks %}
+                    <div class="tbl-header text-[11px] grid grid-cols-[2fr,1fr,1fr,1fr,0.9fr] gap-2 items-center">
+                        <div class="text-left">Task</div>
+                        <div class="text-center">Type</div>
+                        <div class="text-center">Status</div>
+                        <div class="text-center">Due</div>
+                        <div class="text-center">Open</div>
+                    </div>
+                    {% for t in tasks %}
+                        {% set row_cls = 'bg-green-50 border border-green-200' %}
+                        {% if t.overdue_flag %}
+                            {% set row_cls = 'bg-red-50 border border-red-200' %}
+                        {% elif t.status != 'completed' %}
+                            {% set row_cls = 'bg-amber-50 border border-amber-200' %}
+                        {% endif %}
+                        <div class="tbl-row grid grid-cols-[2fr,1fr,1fr,1fr,0.9fr] gap-2 items-center rounded {{ row_cls }}">
+                            <div class="text-left truncate">{{ t.title }}</div>
+                            <div class="text-center">{{ 'Global' if t.company_id is none else 'Company' }}</div>
+                            <div class="text-center">
+                                {% if t.status == 'completed' %}
+                                    <span class="text-green-700 font-semibold">Completed</span>
+                                {% elif t.overdue_flag %}
+                                    <span class="text-red-700 font-semibold">Overdue</span>
+                                {% else %}
+                                    <span class="text-amber-700 font-semibold">Pending</span>
+                                {% endif %}
+                            </div>
+                            <div class="text-center">{{ t.due_display or '—' }}</div>
+                            <div class="text-center">
+                                <a href="{{ url_for('task_detail', task_id=t.id) }}" class="text-blue-600 hover:underline">View</a>
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="text-slate-600">No tasks for this user.</div>
+                {% endif %}
+                <div class="flex items-center justify-between pt-1">
+                    <div class="flex flex-wrap gap-4 items-center">
+                        <div>Completed: <span class="font-semibold">{{ completed }}</span> / {{ total }}</div>
+                        <div>Pending: <span class="font-semibold text-amber-700">{{ pending }}</span></div>
+                        <div>Overdue: <span class="font-semibold text-red-700">{{ overdue }}</span></div>
+                    </div>
+                    <div>
+                        {% if is_company_admin %}
+                            <a href="/company-admin/report/{{ row.id }}" class="text-blue-600 hover:underline">View Tasks</a>
+                        {% else %}
+                            <a href="/admin/report/{{ row.id }}" class="text-blue-600 hover:underline">View Tasks</a>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
         {% endfor %}
@@ -229,6 +278,25 @@
     }
     metricButtons.forEach(btn => {
         btn.addEventListener('click', () => applyUserFilter(btn.dataset.userFilter || 'all'));
+    });
+
+    // User row expand/collapse
+    const setUserArrow = (uid, expanded) => {
+        const arrow = document.querySelector(`[data-user-arrow="${uid}"]`);
+        if (!arrow) return;
+        arrow.style.transform = expanded ? 'rotate(90deg)' : 'rotate(0deg)';
+    };
+    document.querySelectorAll('[data-user-row]').forEach(row => {
+        row.addEventListener('click', () => {
+            const uid = row.dataset.userId;
+            if (!uid) return;
+            const panel = document.getElementById(`user-tasks-${uid}`);
+            if (panel) {
+                const willShow = panel.classList.contains('hidden');
+                panel.classList.toggle('hidden');
+                setUserArrow(uid, willShow);
+            }
+        });
     });
 
     document.querySelectorAll('[data-label-target]').forEach(btn => {

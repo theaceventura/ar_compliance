@@ -470,6 +470,15 @@ def _admin_view_prepare(selected_company_id):
         "overdue": task_overdue,
     }
 
+    # Map tasks to their company for drill-down panels (include global tasks for all companies)
+    company_task_rows = {}
+    company_user_rows = company_user_rows  # already built for potential user views
+    for c in company_summaries:
+        cid = c["company_id"]
+        company_task_rows[cid] = [
+            t for t in tasks_json if (t.get("company_id") == cid or t.get("company_id") is None)
+        ]
+
     return {
         "summary": summary,
         "severity_counts": severity_counts,
@@ -491,6 +500,7 @@ def _admin_view_prepare(selected_company_id):
         "company_totals": company_totals,
         "unassigned_details": unassigned_details,
         "unassigned_tasks": unassigned_tasks,
+        "company_task_rows": company_task_rows,
         "risk_matrix": risk_matrix,
         "task_counts": task_counts,
     }
@@ -505,11 +515,26 @@ def _admin_view(user):
 
     data = _admin_view_prepare(selected_company_id)
 
-    # If a specific company is selected, re-order the summaries so selected appears first
+    # If a specific company is selected, re-order and filter company data so the table matches the dropdown
+    filtered_company_rows = data["company_table_rows"]
+    filtered_company_user_rows = data["company_user_rows"]
+    filtered_company_task_rows = data.get("company_task_rows", {})
+    filtered_company_totals = data["company_totals"]
+    filtered_unassigned_tasks = data["unassigned_tasks"]
+
     if selected_company_id is not None:
         data["company_summaries"].sort(
             key=lambda r: (0 if r.get("company_id") == selected_company_id else 1, (r.get("name") or "").lower())
         )
+        filtered_company_rows = [r for r in data["company_table_rows"] if r.get("company_id") == selected_company_id]
+        filtered_company_user_rows = {
+            k: v for k, v in data["company_user_rows"].items() if str(k) == str(selected_company_id)
+        }
+        filtered_company_task_rows = {
+            k: v for k, v in data.get("company_task_rows", {}).items() if str(k) == str(selected_company_id)
+        }
+        filtered_company_totals = _compute_totals(filtered_company_rows)
+        filtered_unassigned_tasks = filtered_company_totals["unassigned"] if filtered_company_totals else 0
 
     # Expose a compact set of variables to the template exactly as before
     return render_template(
@@ -533,11 +558,12 @@ def _admin_view(user):
         assignment_counts=data["assignment_counts"],
         user_counts=data["user_counts"],
         metric_mode=metric_mode,
-        unassigned_tasks=data["unassigned_tasks"],
+        unassigned_tasks=filtered_unassigned_tasks,
         company_summaries=data["company_summaries"],
-        company_totals=data["company_totals"],
-        company_user_rows=data["company_user_rows"],
-        company_table_rows=data["company_table_rows"],
+        company_totals=filtered_company_totals,
+        company_user_rows=filtered_company_user_rows,
+        company_task_rows=filtered_company_task_rows,
+        company_table_rows=filtered_company_rows,
         risk_matrix=data["risk_matrix"],
         unassigned_details=data["unassigned_details"],
         page_name="templates/admin_task_dashboard.html",
@@ -674,6 +700,7 @@ def _company_admin_view(user):
         "user_count": len(compliance),
     }
     company_user_rows = {selected_company_id: compliance} if selected_company_id else {}
+    company_task_rows = {selected_company_id: tasks_json} if selected_company_id else {}
 
     # User metrics and counts
     um = _company_user_metrics_from_compliance(compliance)
@@ -722,6 +749,7 @@ def _company_admin_view(user):
         company_table_rows=company_table_rows,
         company_totals=company_totals,
         company_user_rows=company_user_rows,
+        company_task_rows=company_task_rows,
         risk_matrix=risk_matrix,
         unassigned_details=unassigned_details,
         page_name="templates/admin_task_dashboard.html",
@@ -877,9 +905,12 @@ def _resolve_acting_user_and_task(user_or_task_id, task_id=None):
             pass
 
     t = db.get_task_for_user(acting_user_id, task_id)
-    if t is None and acting_user is not None:
-        # Ensure the target user has all applicable assignments
-        db.ensure_user_assignments(acting_user_id, acting_user.get("company_id"))
+    if t is None:
+        # Ensure the target user (or current user) has all applicable assignments then re-fetch
+        company_scope = (acting_user.get("company_id") if acting_user else user.get("company_id")) if user else None
+        if acting_user_id:
+            db.ensure_user_assignments(acting_user_id, company_scope)
+            t = db.get_task_for_user(acting_user_id, task_id)
     return acting_user_id, acting_user, t
 
 
@@ -1047,6 +1078,37 @@ def user_dashboard():
 
     user_metrics = _compute_user_metrics_from_compliance(compliance)
 
+    # Build a per-user task list for drill-down panels
+    user_tasks_map = {}
+    today = date.today()
+    for r in compliance:
+        uid = r["id"]
+        tasks = []
+        for t in db.get_tasks_for_user(uid):
+            td = dict(t)
+            # Format due date
+            due_display = td.get("due_date")
+            if due_display:
+                try:
+                    due_dt = datetime.strptime(due_display, "%Y-%m-%d")
+                    due_display = due_dt.strftime(DATE_FMT)
+                except ValueError:
+                    pass
+            # Overdue flag: due date in past and not completed
+            overdue_flag = False
+            if td.get("due_date") and td.get("status") != "completed":
+                try:
+                    due_dt = datetime.strptime(td["due_date"], "%Y-%m-%d")
+                    overdue_flag = due_dt.date() < today
+                except ValueError:
+                    overdue_flag = False
+            td["due_display"] = due_display
+            td["overdue_flag"] = overdue_flag
+            tasks.append(td)
+        # Sort tasks by due date then title for consistent display
+        tasks.sort(key=lambda x: ((x.get("due_date") or ""), (x.get("title") or "")))
+        user_tasks_map[uid] = tasks
+
     companies = db.admin_get_companies()
     if user["role"] == "company_admin" and selected_company_id:
         companies = [db.admin_get_company(selected_company_id)]
@@ -1061,6 +1123,7 @@ def user_dashboard():
         companies=companies,
         selected_company_id=selected_company_id,
         is_company_admin=user["role"] == "company_admin",
+        user_tasks_map=user_tasks_map,
         page_name="templates/user_dashboard.html",
     )
 
@@ -1068,6 +1131,8 @@ def user_dashboard():
 # Admin: list/create tasks, manage option lists
 def _admin_tasks_get_view(admin):
     """Helper to render the admin tasks GET view (extracted for clarity)."""
+    task_id_param = request.args.get("task_id", "").strip()
+    # List filter company (controls which tasks display)
     company_arg = request.args.get("company_id", "").strip()
     if company_arg == "all" or company_arg == "":
         selected_company_id = None
@@ -1078,6 +1143,21 @@ def _admin_tasks_get_view(admin):
             selected_company_id = None
     else:
         selected_company_id = None
+
+    # Create-form company scope (independent of list filter)
+    create_arg = request.args.get("create_company_id", "").strip()
+    stored_create = session.get("task_create_company_filter")
+    if create_arg == "all" or create_arg == "":
+        create_company_id = None
+        session.pop("task_create_company_filter", None)
+    elif create_arg:
+        try:
+            create_company_id = int(create_arg)
+            session["task_create_company_filter"] = create_company_id
+        except ValueError:
+            create_company_id = stored_create
+    else:
+        create_company_id = stored_create
 
     tasks_raw = db.admin_get_all_tasks(selected_company_id)
     tasks = []
@@ -1092,7 +1172,21 @@ def _admin_tasks_get_view(admin):
         tasks.append({**t, "due_display": due_display})
     impacts = db.admin_get_options("impact", admin["company_id"])
     severities = db.admin_get_options("severity", admin["company_id"])
-    users = db.admin_get_all_users(selected_company_id)
+    users = db.admin_get_all_users(create_company_id)
+    edit_task = None
+    assigned_ids = set()
+    assignment_status = {}
+    if task_id_param:
+        try:
+            tid = int(task_id_param)
+            edit_task = db.admin_get_task(tid, admin.get("company_id") if admin.get("role") == "company_admin" else None)
+            if edit_task:
+                create_company_id = edit_task["company_id"]
+                assigned_ids = db.admin_get_task_assignments(tid)
+                assignment_status = db.admin_get_task_assignment_status(tid)
+                users = db.admin_get_all_users(create_company_id)
+        except ValueError:
+            edit_task = None
     descriptions = db.admin_get_task_field_descriptions()
     companies = db.admin_get_companies()
     company_lookup = {c["id"]: c["name"] for c in companies}
@@ -1106,12 +1200,17 @@ def _admin_tasks_get_view(admin):
         companies=companies,
         company_lookup=company_lookup,
         selected_company_id=selected_company_id,
+        edit_task=edit_task,
+        assigned_ids=assigned_ids,
+        assignment_status=assignment_status,
+        create_company_id=create_company_id,
         page_name="templates/admin_tasks.html",
     )
 
 
 def _admin_tasks_handle_post(admin):
     """Helper to process the admin tasks POST (creation) action (extracted for clarity)."""
+    edit_task_id = request.form.get("task_id")
     title = request.form["title"].strip()
     question = request.form["verification_question"].strip()
     answer = request.form["verification_answer"].strip()
@@ -1122,7 +1221,7 @@ def _admin_tasks_handle_post(admin):
     selected_user_ids = [uid for uid in request.form.getlist("user_ids") if uid]
     assign_all = request.form.get("assign_all") == "on"
     owner_id = selected_user_ids[0] if selected_user_ids else None
-    company_val = request.form.get("company_id", "").strip()
+    company_val = request.form.get("create_company_id", "").strip()
     company_id = int(company_val) if company_val else None
     descriptions = db.admin_get_task_field_descriptions()
     # Users limited to company scope if specified
@@ -1152,23 +1251,33 @@ def _admin_tasks_handle_post(admin):
     if missing:
         users_filtered = db.admin_get_all_users(company_id)
         companies = db.admin_get_companies()
+        edit_task_ctx = db.admin_get_task(int(edit_task_id), admin.get("company_id") if admin.get("role") == "company_admin" else None) if edit_task_id else None
         return render_template(
             "admin_tasks.html",
             error="Please fill required fields: " + ", ".join(missing),
-            tasks=db.admin_get_all_tasks(admin["company_id"]),
+            tasks=db.admin_get_all_tasks(selected_company_id := None),
             impacts=db.admin_get_options("impact", admin["company_id"]),
             severities=db.admin_get_options("severity", admin["company_id"]),
             users=users_filtered,
             descriptions=descriptions,
             companies=companies,
             company_lookup={c["id"]: c["name"] for c in companies},
-            selected_company_id=company_id,
+            selected_company_id=selected_company_id,
+            create_company_id=company_id,
+            edit_task=edit_task_ctx,
+            assigned_ids=db.admin_get_task_assignments(int(edit_task_id)) if edit_task_id else set(),
+            assignment_status=db.admin_get_task_assignment_status(int(edit_task_id)) if edit_task_id else {},
             page_name="templates/admin_tasks.html",
         )
 
-    db.admin_create_task(title, description, due_date, impact, severity, owner_id, question, answer, company_id, selected_user_ids, assign_all)
-    flash("Task created.")
-    return redirect(url_for("admin_tasks"))
+    if edit_task_id:
+        db.admin_update_task(int(edit_task_id), title, description, due_date, impact, severity, owner_id, question, answer, company_id)
+        db.admin_update_task_assignments(int(edit_task_id), company_id, selected_user_ids, assign_all or company_id is None)
+        flash("Task updated.")
+    else:
+        db.admin_create_task(title, description, due_date, impact, severity, owner_id, question, answer, company_id, selected_user_ids, assign_all)
+        flash("Task created.")
+    return redirect(url_for("admin_tasks", company_id=request.args.get("company_id", "all"), create_company_id=company_id or "all"))
 
 
 @app.route("/admin/tasks", methods=["GET", "POST"])
@@ -1179,6 +1288,13 @@ def admin_tasks():
     if request.method == "GET":
         return _admin_tasks_get_view(admin)
     return _admin_tasks_handle_post(admin)
+
+
+# Legacy edit route redirects to unified task management page with task_id
+@app.route("/admin/tasks/<int:task_id>/edit")
+@admin_required
+def admin_edit_task_redirect(task_id):
+    return redirect(url_for("admin_tasks", task_id=task_id))
 
 @app.route("/admin/task-config")
 @admin_required

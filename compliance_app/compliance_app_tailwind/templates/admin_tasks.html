@@ -8,22 +8,26 @@
 <div class="bg-red-100 text-red-800 px-3 py-2 rounded mb-3">{{ error }}</div>
 {% endif %}
 
+{% set is_edit = edit_task is not none %}
+
 <div class="space-y-6">
 
     <div data-widget-id="admin-tasks-existing" class="bg-white shadow rounded">
-        <div class="bg-slate-100 px-4 py-2 rounded-t font-semibold text-slate-700 flex items-center justify-between">
-            <h3>Existing tasks</h3>
-            <form method="GET" class="flex items-center space-x-2 text-sm" id="admin-tasks-filter-form">
-                <label for="filterCompany" class="text-slate-700">Company:</label>
-                <select id="filterCompany" name="company_id" class="border rounded px-2 py-1">
-                    <option value="all" {% if selected_company_id is none %}selected{% endif %}>All</option>
-                    {% for c in companies %}
-                        <option value="{{ c.id }}" {% if selected_company_id == c.id %}selected{% endif %}>{{ c.name }}</option>
-                    {% endfor %}
-                </select>
-            </form>
+        <div class="bg-slate-100 px-4 py-2 rounded-t font-semibold text-slate-700">
+            <div class="flex items-center justify-between">
+                <h3>Tasks</h3>
+                <form method="GET" class="flex items-center space-x-2 text-sm" id="admin-tasks-filter-form">
+                    <label for="filterCompany" class="text-slate-700">Company:</label>
+                    <select id="filterCompany" name="company_id" class="border rounded px-2 py-1">
+                        <option value="all" {% if selected_company_id is none %}selected{% endif %}>All</option>
+                        {% for c in companies %}
+                            <option value="{{ c.id }}" {% if selected_company_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+                        {% endfor %}
+                    </select>
+                </form>
+            </div>
         </div>
-        <div class="p-4 space-y-2 text-sm">
+       <div class="p-4 space-y-2 text-sm">
             <div class="tbl-header text-sm grid grid-cols-[80px,3.5fr,2fr,1.1fr,1.1fr,1.2fr,1fr,1fr] gap-2 items-center">
                 <div class="text-center">Task No</div>
                 <div class="text-left">Task</div>
@@ -35,11 +39,14 @@
                 <div class="text-center">Actions</div>
             </div>
             {% if tasks %}
-                {% for t in tasks %}
+                {% set limit = 5 %}
+                {% set show_all = request.args.get('show') == 'all' %}
+                {% set page_tasks = tasks if show_all else tasks[:limit] %}
+                {% for t in page_tasks %}
                     <div class="tbl-row grid grid-cols-[80px,3.5fr,2fr,1.1fr,1.1fr,1.2fr,1fr,1fr] gap-2 items-center text-sm {% if loop.index0 % 2 == 1 %}tbl-row-alt{% endif %} {% if t.overdue %}bg-red-50 border border-red-200{% endif %}">
                         <div class="text-xs text-slate-500 whitespace-nowrap text-center">#{{ t.id }}</div>
                         <div class="truncate text-left">
-                            <a href="/admin/tasks/{{ t.id }}/edit" class="text-blue-600 hover:underline truncate inline-block">{{ t.title }}</a>
+                            <a href="/admin/tasks?task_id={{ t.id }}&company_id={{ selected_company_id if selected_company_id is not none else 'all' }}&create_company_id={{ t.company_id or '' }}" class="text-blue-600 hover:underline truncate inline-block">{{ t.title }}</a>
                         </div>
                         <div class="text-left text-xs text-slate-600 truncate">
                             {% if t.company_name %}{{ t.company_name }}{% elif t.company_id %}Company #{{ t.company_id }}{% else %}<span class="text-amber-700 font-semibold">Global</span>{% endif %}
@@ -57,124 +64,146 @@
                             {% endif %}
                         </div>
                         <div class="text-center text-xs">
-                            <a class="text-blue-600 hover:underline" href="/admin/tasks/{{ t.id }}/edit">Edit</a>
+                            <a class="text-blue-600 hover:underline" href="/admin/tasks?task_id={{ t.id }}&company_id={{ selected_company_id if selected_company_id is not none else 'all' }}&create_company_id={{ t.company_id or '' }}">Edit</a>
                         </div>
                     </div>
                 {% endfor %}
+                {% if tasks|length > limit and not show_all %}
+                    <div class="flex items-center justify-between pt-2 text-xs text-slate-600">
+                        <span>Showing {{ limit }} of {{ tasks|length }}</span>
+                        <div class="space-x-2">
+                            <a href="?company_id={{ selected_company_id if selected_company_id is not none else 'all' }}&show=all" class="text-blue-600 hover:underline">Show all</a>
+                        </div>
+                    </div>
+                {% elif show_all %}
+                    <div class="flex items-center justify-end pt-2 text-xs text-slate-600">
+                        <a href="?company_id={{ selected_company_id if selected_company_id is not none else 'all' }}" class="text-blue-600 hover:underline">Show less</a>
+                    </div>
+                {% endif %}
+                <div class="flex justify-end mt-3">
+                    <a href="/admin/tasks?new=1{% if selected_company_id is not none %}&company_id={{ selected_company_id }}&create_company_id={{ selected_company_id }}{% endif %}" class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">New Task</a>
+                </div>
             {% else %}
                 <div class="tbl-empty text-sm">No tasks.</div>
+                <div class="flex justify-end mt-3">
+                    <a href="/admin/tasks?new=1{% if selected_company_id is not none %}&company_id={{ selected_company_id }}&create_company_id={{ selected_company_id }}{% endif %}" class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">New Task</a>
+                </div>
             {% endif %}
         </div>
     </div>
-
+    {% set show_form = is_edit or request.args.get('new') %}
+    {% if show_form %}
     <div data-widget-id="admin-tasks-create">
         <div class="bg-white shadow rounded">
+            {% set is_edit = edit_task is not none %}
             <div class="bg-slate-100 px-4 py-2 rounded-t font-semibold text-slate-700 flex items-center justify-between">
-                <h3>Create New Task</h3>
+                <h3>{{ 'Edit Task' if is_edit else 'New Task' }}</h3>
+                {% if is_edit %}<span class="text-xs text-slate-500">Task #{{ edit_task.id }}</span>{% endif %}
             </div>
             {% if app_settings.show_validation_notes %}
             <div class="px-4 pt-3 text-xs text-slate-600 bg-slate-50 border-b border-slate-200">
                 Validation: Company tasks can only be assigned to users in that company; global tasks go to all users. Cross-company assignments are blocked and cleaned. Due dates drive overdue status.
             </div>
             {% endif %}
-            <form method="POST" class="p-4 space-y-2 text-sm">
+            {% set current_company = (edit_task.company_id if is_edit else (create_company_id if create_company_id is defined else session.task_create_company_filter)) %}
+            <form id="task-create-form" method="POST" class="p-4 space-y-2 text-sm">
+                {% if is_edit %}<input type="hidden" name="task_id" value="{{ edit_task.id }}">{% endif %}
                 <div class="grid grid-cols-[180px,1fr] items-center px-3 py-2 rounded bg-slate-50">
-                    <div class="text-left font-medium">Title</div>
-                    <div>
-                        <div class="text-xs text-slate-500 mb-1">{{ descriptions.title.description }}</div>
-                        <input name="title" placeholder="Title" class="w-full border p-2 rounded">
+                    <div class="text-left font-medium">Title / Due date</div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <div>
+                            <div class="text-xs text-slate-500 mb-1">{{ descriptions.title.description }}</div>
+                            <input name="title" placeholder="Title" value="{{ edit_task.title if is_edit else '' }}" class="w-full border p-2 rounded">
+                        </div>
+                        <div>
+                            <div class="text-xs text-slate-500 mb-1">{{ descriptions.due_date.description }}</div>
+                            <input name="due_date" type="date" value="{{ edit_task.due_date if is_edit else '' }}" class="w-full border p-2 rounded">
+                        </div>
                     </div>
                 </div>
                 <div class="grid grid-cols-[180px,1fr] items-center px-3 py-2 rounded bg-slate-100/60">
                     <div class="text-left font-medium">Description</div>
                     <div>
                         <div class="text-xs text-slate-500 mb-1">{{ descriptions.description.description }}</div>
-                        <input name="description" placeholder="Description" class="w-full border p-2 rounded">
-                    </div>
-                </div>
-                <div class="grid grid-cols-[180px,1fr] items-center px-3 py-2 rounded bg-slate-100/60">
-                    <div class="text-left font-medium">Due date (optional)</div>
-                    <div>
-                        <div class="text-xs text-slate-500 mb-1">{{ descriptions.due_date.description }}</div>
-                        <input name="due_date" type="date" class="w-full border p-2 rounded">
-                    </div>
-                </div>
-                <div class="grid grid-cols-[180px,1fr] items-center px-3 py-2 rounded bg-slate-50">
-                    <div class="text-left font-medium">Impact</div>
-                    <div>
-                        <div class="text-xs text-slate-500 mb-1">{{ descriptions.impact.description }}</div>
-                        <select name="impact" class="w-full border p-2 rounded">
-                            <option value="">-- Select --</option>
-                            {% for opt in impacts %}
-                            <option value="{{ opt.value }}">{{ opt.value }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                </div>
-                <div class="grid grid-cols-[180px,1fr] items-center px-3 py-2 rounded bg-slate-100/60">
-                    <div class="text-left font-medium">Severity</div>
-                    <div>
-                        <div class="text-xs text-slate-500 mb-1">Select a label for reporting.</div>
-                        <select name="severity" class="w-full border p-2 rounded">
-                            <option value="">-- Select --</option>
-                            {% for opt in severities %}
-                            <option value="{{ opt.value }}">{{ opt.value }}</option>
-                            {% endfor %}
-                        </select>
+                        <input name="description" placeholder="Description" value="{{ edit_task.description if is_edit else '' }}" class="w-full border p-2 rounded">
                     </div>
                 </div>
                 <div class="grid grid-cols-[180px,1fr] items-center px-3 py-2 rounded bg-slate-50">
                     <div class="text-left font-medium">Verification question</div>
                     <div>
                         <div class="text-xs text-slate-500 mb-1">{{ descriptions.verification_question.description }}</div>
-                        <input name="verification_question" placeholder="Verification question" class="w-full border p-2 rounded">
+                        <input name="verification_question" value="{{ edit_task.verification_question if is_edit else '' }}" placeholder="Verification question" class="w-full border p-2 rounded">
                     </div>
                 </div>
                 <div class="grid grid-cols-[180px,1fr] items-center px-3 py-2 rounded bg-slate-100/60">
                     <div class="text-left font-medium">Verification answer</div>
                     <div>
                         <div class="text-xs text-slate-500 mb-1">{{ descriptions.verification_answer.description }}</div>
-                        <input name="verification_answer" placeholder="Correct answer" class="w-full border p-2 rounded">
+                        <input name="verification_answer" value="{{ edit_task.verification_answer if is_edit else '' }}" placeholder="Correct answer" class="w-full border p-2 rounded">
+                    </div>
+                </div>
+                <div class="grid grid-cols-[180px,1fr] items-center px-3 py-2 rounded bg-slate-50">
+                    <div class="text-left font-medium">Impact / Severity</div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <div>
+                            <div class="text-xs text-slate-500 mb-1">{{ descriptions.impact.description }}</div>
+                            <select name="impact" class="w-full border p-2 rounded">
+                                <option value="">-- Select --</option>
+                                {% for opt in impacts %}
+                                <option value="{{ opt.value }}" {% if is_edit and opt.value == edit_task.impact %}selected{% endif %}>{{ opt.value }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <div class="text-xs text-slate-500 mb-1">Select a label for reporting.</div>
+                            <select name="severity" class="w-full border p-2 rounded">
+                                <option value="">-- Select --</option>
+                                {% for opt in severities %}
+                                <option value="{{ opt.value }}" {% if is_edit and opt.value == edit_task.severity %}selected{% endif %}>{{ opt.value }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
                     </div>
                 </div>
                 <div class="grid grid-cols-[180px,1fr] items-center px-3 py-2 rounded bg-slate-50">
                     <div class="text-left font-medium">Company scope</div>
                     <div>
-                        <select id="createCompanyScope" name="company_id" class="w-full border p-2 rounded">
-                            <option value="">Global (all companies)</option>
+                        <select id="createCompanyScope" name="create_company_id" class="w-full border p-2 rounded">
+                            <option value="" {% if not current_company %}selected{% endif %}>Global (all companies)</option>
                             {% for c in companies %}
-                                <option value="{{ c.id }}" {% if selected_company_id is defined and selected_company_id == c.id %}selected{% elif session.company_id and session.company_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+                                <option value="{{ c.id }}" {% if current_company == c.id %}selected{% elif (not is_edit) and session.company_id and session.company_id == c.id %}selected{% endif %}>{{ c.name }}</option>
                             {% endfor %}
                         </select>
                     </div>
                 </div>
-                <div class="grid grid-cols-[180px,1fr] items-start px-3 py-3 rounded bg-slate-100/60">
+                {% set company_selected = current_company %}
+                <div id="assignment-section" class="grid grid-cols-[180px,1fr] items-start px-3 py-3 rounded bg-slate-100/60{% if not company_selected %} hidden{% endif %}">
                     <div class="text-left font-medium">Assignments</div>
                     <div class="space-y-2">
                         <div class="text-xs text-slate-500">{{ descriptions.assignment.description }}</div>
                         <label for="user_ids" class="block text-sm text-slate-600 mb-1">Select users (Ctrl/Cmd+click for multiple)</label>
                         <select id="user_ids" name="user_ids" multiple class="w-full border p-2 rounded h-32">
                             {% for u in users %}
-                                <option value="{{ u.id }}">{{ u.username }}</option>
+                                <option value="{{ u.id }}" {% if is_edit and u.id in assigned_ids %}selected{% endif %}>{{ u.username }}</option>
                             {% endfor %}
                         </select>
                         <label class="inline-flex items-center space-x-2 text-sm text-slate-700">
-                            <input type="checkbox" name="assign_all" class="border rounded">
+                            <input type="checkbox" name="assign_all" class="border rounded" {% if not current_company %}checked{% endif %}>
                             <span>Assign to all users</span>
                         </label>
                     </div>
                 </div>
-                <div class="flex items-center justify-start gap-2 px-3 pt-2">
-                    <button class="bg-blue-600 text-white px-4 py-2 rounded min-w-[140px]">Create</button>
+                <div class="flex items-center justify-end gap-2 px-3 pt-2">
+                    <button class="bg-blue-600 text-white px-4 py-2 rounded min-w-[140px]">{{ 'Save' if is_edit else 'Create' }}</button>
                 </div>
             </form>
         </div>
-
-</div>
-
-</div>
+    </div>
+    {% endif %}
 
 <script>
+    const isEdit = {{ 'true' if edit_task else 'false' }};
+    const isNew = {{ 'true' if request.args.get('new') else 'false' }};
     const filterForm = document.getElementById('admin-tasks-filter-form');
     const filterCompany = document.getElementById('filterCompany');
     if (filterForm && filterCompany) {
@@ -182,18 +211,95 @@
     }
 
     const scopeSelect = document.getElementById('createCompanyScope');
+    const assignmentSection = document.getElementById('assignment-section');
+    const assignAll = document.querySelector('input[name=\"assign_all\"]');
+    const userSelect = document.getElementById('user_ids');
+    // Persist form state when switching company to avoid clearing inputs
+    const form = document.getElementById('task-create-form');
+    const persistKey = 'admin_task_draft';
+    const saveDraft = () => {
+        if (!form) return;
+        const data = {
+            company_id: scopeSelect ? scopeSelect.value : '',
+            title: form.title?.value || '',
+            due_date: form.due_date?.value || '',
+            description: form.description?.value || '',
+            impact: form.impact?.value || '',
+            severity: form.severity?.value || '',
+            verification_question: form.verification_question?.value || '',
+            verification_answer: form.verification_answer?.value || '',
+            assign_all: form.assign_all?.checked || false,
+            user_ids: userSelect ? Array.from(userSelect.selectedOptions).map(o => o.value) : [],
+        };
+        localStorage.setItem(persistKey, JSON.stringify(data));
+    };
+    const loadDraft = () => {
+        if (!form) return;
+        const raw = localStorage.getItem(persistKey);
+        if (!raw) return;
+        let data;
+        try { data = JSON.parse(raw); } catch { return; }
+        if (scopeSelect && data.company_id !== undefined) {
+            scopeSelect.value = data.company_id;
+        }
+        if (data.title !== undefined && form.title) form.title.value = data.title;
+        if (data.due_date !== undefined && form.due_date) form.due_date.value = data.due_date;
+        if (data.description !== undefined && form.description) form.description.value = data.description;
+        if (data.impact !== undefined && form.impact) form.impact.value = data.impact;
+        if (data.severity !== undefined && form.severity) form.severity.value = data.severity;
+        if (data.verification_question !== undefined && form.verification_question) form.verification_question.value = data.verification_question;
+        if (data.verification_answer !== undefined && form.verification_answer) form.verification_answer.value = data.verification_answer;
+        if (form.assign_all) form.assign_all.checked = !!data.assign_all;
+        if (userSelect && data.user_ids) {
+            const wanted = new Set(data.user_ids);
+            Array.from(userSelect.options).forEach(opt => {
+                opt.selected = wanted.has(opt.value);
+            });
+        }
+    };
+
     if (scopeSelect) {
         scopeSelect.addEventListener('change', () => {
+            saveDraft();
             const val = scopeSelect.value;
             const params = new URLSearchParams(globalThis.location.search);
+            // Keep list filter intact; only adjust create scope param
             if (val) {
-                params.set('company_id', val);
+                params.set('create_company_id', val);
             } else {
-                params.set('company_id', 'all');
+                params.set('create_company_id', 'all');
             }
             globalThis.location.search = params.toString();
         });
     }
+
+    // Show/hide assignments based on company selection (hidden when global/none)
+    const toggleAssignments = () => {
+        if (!assignmentSection || !scopeSelect) return;
+        const hasCompany = scopeSelect.value !== '';
+        assignmentSection.classList.toggle('hidden', !hasCompany);
+        if (!hasCompany) {
+            if (userSelect) Array.from(userSelect.options).forEach(opt => opt.selected = false);
+            if (assignAll) assignAll.checked = false;
+        }
+    };
+    if (scopeSelect) {
+        scopeSelect.addEventListener('change', toggleAssignments);
+    }
+
+    // Save draft on unload to minimize data loss
+    window.addEventListener('beforeunload', saveDraft);
+
+    if (isNew) {
+        // Starting a fresh task: clear any saved draft and skip loading
+        localStorage.removeItem(persistKey);
+    } else if (!isEdit) {
+        loadDraft();
+    } else {
+        // Clear any stale draft so it doesn't overwrite edit values
+        localStorage.removeItem(persistKey);
+    }
+    toggleAssignments();
 </script>
 
 {% endblock %}

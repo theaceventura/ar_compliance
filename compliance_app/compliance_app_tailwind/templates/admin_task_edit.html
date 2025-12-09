@@ -11,44 +11,73 @@
             <div class="bg-red-100 text-red-800 px-3 py-2 rounded mb-3">{{ error }}</div>
         {% endif %}
 
-        <form method="POST" class="space-y-3">
-            <input name="title" value="{{ task.title }}" placeholder="Title" class="w-full border p-2 rounded">
-            <input name="description" value="{{ task.description }}" placeholder="Description" class="w-full border p-2 rounded">
-            <div>
-                <label class="block text-sm text-slate-600 mb-1">Due date (optional)</label>
-                <input name="due_date" type="date" value="{{ task.due_date }}" class="w-full border p-2 rounded">
-            </div>
-            <div>
-                <label class="block text-sm text-slate-600 mb-1">Task owner (optional)</label>
-                <select name="owner_user_id" class="w-full border p-2 rounded">
-                    <option value="">-- Select --</option>
-                    {% for u in users %}
-                        <option value="{{ u.id }}" {% if task.owner_user_id == u.id %}selected{% endif %}>{{ u.username }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                    <label class="block text-sm text-slate-600 mb-1">Impact</label>
-                    <select name="impact" class="w-full border p-2 rounded">
-                        <option value="">-- Select --</option>
-                        {% for opt in impacts %}
-                        <option value="{{ opt.value }}" {% if task.impact == opt.value %}selected{% endif %}>{{ opt.value }}</option>
-                        {% endfor %}
-                    </select>
+        <form method="POST" class="p-4 space-y-2 text-sm">
+            <div class="grid grid-cols-[180px,1fr] items-center px-3 py-2 rounded bg-slate-50">
+                <div class="text-left font-medium">Title / Due date</div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <div>
+                        <div class="text-xs text-slate-500 mb-1">Short name shown in lists.</div>
+                        <input name="title" value="{{ task.title }}" placeholder="Title" class="w-full border p-2 rounded">
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 mb-1">Optional due date for overdue status.</div>
+                        <input name="due_date" type="date" value="{{ task.due_date }}" class="w-full border p-2 rounded">
+                    </div>
                 </div>
+            </div>
+            <div class="grid grid-cols-[180px,1fr] items-center px-3 py-2 rounded bg-slate-100/60">
+                <div class="text-left font-medium">Description</div>
                 <div>
-                    <label class="block text-sm text-slate-600 mb-1">Severity</label>
-                    <select name="severity" class="w-full border p-2 rounded">
+                    <div class="text-xs text-slate-500 mb-1">Optional details shown on the task page.</div>
+                    <input name="description" value="{{ task.description }}" placeholder="Description" class="w-full border p-2 rounded">
+                </div>
+            </div>
+            <div class="grid grid-cols-[180px,1fr] items-center px-3 py-2 rounded bg-slate-50">
+                <div class="text-left font-medium">Task owner (optional)</div>
+                <div>
+                    <select name="owner_user_id" class="w-full border p-2 rounded">
                         <option value="">-- Select --</option>
-                        {% for opt in severities %}
-                        <option value="{{ opt.value }}" {% if task.severity == opt.value %}selected{% endif %}>{{ opt.value }}</option>
+                        {% for u in users %}
+                            <option value="{{ u.id }}" {% if task.owner_user_id == u.id %}selected{% endif %}>{{ u.username }}</option>
                         {% endfor %}
                     </select>
                 </div>
             </div>
-            <input name="verification_question" value="{{ task.verification_question }}" placeholder="Verification question" class="w-full border p-2 rounded">
-            <input name="verification_answer" value="{{ task.verification_answer }}" placeholder="Correct answer" class="w-full border p-2 rounded">
+            <div class="grid grid-cols-[180px,1fr] items-center px-3 py-2 rounded bg-slate-100/60">
+                <div class="text-left font-medium">Impact / Severity</div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <div>
+                        <div class="text-xs text-slate-500 mb-1">Select an impact label.</div>
+                        <select name="impact" class="w-full border p-2 rounded">
+                            <option value="">-- Select --</option>
+                            {% for opt in impacts %}
+                            <option value="{{ opt.value }}" {% if task.impact == opt.value %}selected{% endif %}>{{ opt.value }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 mb-1">Select a severity label.</div>
+                        <select name="severity" class="w-full border p-2 rounded">
+                            <option value="">-- Select --</option>
+                            {% for opt in severities %}
+                            <option value="{{ opt.value }}" {% if task.severity == opt.value %}selected{% endif %}>{{ opt.value }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="grid grid-cols-[180px,1fr] items-center px-3 py-2 rounded bg-slate-50">
+                <div class="text-left font-medium">Verification question</div>
+                <div>
+                    <input name="verification_question" value="{{ task.verification_question }}" placeholder="Verification question" class="w-full border p-2 rounded">
+                </div>
+            </div>
+            <div class="grid grid-cols-[180px,1fr] items-center px-3 py-2 rounded bg-slate-100/60">
+                <div class="text-left font-medium">Verification answer</div>
+                <div>
+                    <input name="verification_answer" value="{{ task.verification_answer }}" placeholder="Correct answer" class="w-full border p-2 rounded">
+                </div>
+            </div>
 
             <div class="bg-slate-50 border border-slate-200 rounded p-3 space-y-3">
                 <div>
@@ -120,9 +149,9 @@
                         </div>
                     </div>
                 </div>
-               <div class="flex space-x-3 pt-1">
-                   <button class="bg-blue-600 text-white px-4 py-2 rounded">Save</button>
+               <div class="flex justify-end space-x-3 pt-1">
                    <a href="/admin/tasks" class="text-slate-600 px-4 py-2">Cancel</a>
+                   <button class="bg-blue-600 text-white px-4 py-2 rounded min-w-[140px]">Save</button>
                </div>
            </div>
        </form>
