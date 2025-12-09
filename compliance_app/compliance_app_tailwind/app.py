@@ -53,6 +53,10 @@ db.create_tables_if_needed()
 def inject_app_settings():
     """Make app settings available to every template render and build a small banner payload."""
     settings = db.admin_get_app_settings()
+    if settings is None:
+        settings = {}
+    if isinstance(settings, dict) and not settings.get("app_name"):
+        settings["app_name"] = "Compliance Tracker"
     # Build a lightweight banner object for templates if a user is logged in
     banner = None
     if "user_id" in session:
@@ -365,8 +369,11 @@ def _task_to_base(t, comp):
     base["assign_total"] = comp.get("total", 0)
     base["fully_completed"] = base["assign_total"] > 0 and base["assign_completed"] == base["assign_total"]
     base["completion_pct"] = round((base["assign_completed"] / base["assign_total"]) * 100, 1) if base["assign_total"] else 0
+    # Normalize due date display and overdue flag
     overdue_raw = t["overdue"] if "overdue" in t.keys() else False
-    base["overdue"] = bool(overdue_raw and not base["fully_completed"])
+    is_overdue_date, due_display = _format_due_and_overdue(t["due_date"] if "due_date" in t.keys() else None, date.today())
+    base["due_display"] = due_display
+    base["overdue"] = bool((overdue_raw or is_overdue_date) and not base["fully_completed"])
     base["company_label"] = base["company_name"] if "company_name" in base.keys() and base["company_name"] else "Global"
     return base
 
@@ -398,7 +405,14 @@ def _admin_build_company_rows(companies_list, unassigned_seen, unassigned_detail
     return summaries, user_rows
 
 def _admin_view_prepare(selected_company_id):
-    """Prepare and return a dict of computed values for the admin dashboard to keep _admin_view small."""
+    """Prepare and return all derived data needed by the admin task dashboard.
+
+    Steps (in order):
+    1) Ensure assignments exist for the selected company (or all) so counts are consistent.
+    2) Build task/user compliance metrics and palettes for charts.
+    3) Compute aggregates (tasks, assignments, rollups) and company drill-down rows.
+    4) Package everything the template expects (including unassigned details and risk matrix).
+    """
     db.admin_ensure_assignments_for_company(selected_company_id)
 
     summary = db.admin_get_summary_counts(selected_company_id)
@@ -836,6 +850,7 @@ def _personal_view(user):
         total_tasks=total_tasks,
         completed_count=completed_count,
         pending_count=pending_count,
+        pending_overdue=pending_overdue,
         compliance_percent=compliance_percent,
         severity_labels=severity_labels,
         severity_data=severity_data,
@@ -1952,8 +1967,12 @@ def admin_app_settings():
     """Render and save global app settings and completion colours."""
     settings = db.admin_get_app_settings()
     if request.method == "GET":
+        if settings is None:
+            settings = {}
+        if isinstance(settings, dict) and not settings.get("app_name"):
+            settings["app_name"] = "Compliance Tracker"
         completion_colors = {}
-        palette = settings["completion_palette"] if settings else ""
+        palette = settings.get("completion_palette", "") if settings else ""
         if palette:
             for part in palette.split(","):
                 if ":" in part:
@@ -1961,6 +1980,7 @@ def admin_app_settings():
                     completion_colors[k.strip()] = v.strip()
         return render_template("admin_app.html", settings=settings, completion_colors=completion_colors, page_name="templates/admin_app.html")
 
+    app_name = request.form.get("app_name", "").strip() or (settings.get("app_name") if settings else "Compliance Tracker")
     version = request.form.get("version", "").strip()
     show_version = request.form.get("show_version") == "on"
     show_page_name = request.form.get("show_page_name") == "on"
@@ -1975,6 +1995,7 @@ def admin_app_settings():
     show_user_charts_user = request.form.get("show_user_charts_user") == "on"
     show_validation_notes = request.form.get("show_validation_notes") == "on"
     db.admin_update_app_settings(
+        app_name,
         version,
         show_version,
         show_page_name,

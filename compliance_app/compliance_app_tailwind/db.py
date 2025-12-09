@@ -139,6 +139,7 @@ def _ensure_app_settings(cur):
     cur.execute("""
         CREATE TABLE IF NOT EXISTS app_settings (
             id INTEGER PRIMARY KEY CHECK (id = 1),
+            app_name TEXT,
             version TEXT,
             show_version INTEGER DEFAULT 0,
             show_page_name INTEGER DEFAULT 0,
@@ -159,6 +160,7 @@ def _ensure_app_settings(cur):
     """)
 
     app_settings_columns = [
+        ("app_name", "ALTER TABLE app_settings ADD COLUMN app_name TEXT"),
         ("show_module_tree", "ALTER TABLE app_settings ADD COLUMN show_module_tree INTEGER DEFAULT 0"),
         ("show_cut_icon", "ALTER TABLE app_settings ADD COLUMN show_cut_icon INTEGER DEFAULT 0"),
         ("show_label_edit", "ALTER TABLE app_settings ADD COLUMN show_label_edit INTEGER DEFAULT 0"),
@@ -180,13 +182,14 @@ def _ensure_app_settings(cur):
     cur.execute("SELECT 1 FROM app_settings WHERE id=1")
     if cur.fetchone() is None:
         cur.execute("""
-            INSERT INTO app_settings (id, version, show_version, show_page_name, show_module_tree, show_cut_icon, show_label_edit, show_task_charts, show_risk_matrix, show_user_banner, show_user_charts_global, show_user_charts_company, show_user_charts_user, show_validation_notes, severity_palette, impact_palette, completion_palette)
-            VALUES (1, '', 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, '', '', '')
+            INSERT INTO app_settings (id, app_name, version, show_version, show_page_name, show_module_tree, show_cut_icon, show_label_edit, show_task_charts, show_risk_matrix, show_user_banner, show_user_charts_global, show_user_charts_company, show_user_charts_user, show_validation_notes, severity_palette, impact_palette, completion_palette)
+            VALUES (1, 'Compliance Tracker', '', 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, '', '', '')
         """)
     else:
         cur.execute("""
             UPDATE app_settings
-            SET show_user_charts_global = COALESCE(show_user_charts_global, 1),
+            SET app_name = COALESCE(app_name, 'Compliance Tracker'),
+                show_user_charts_global = COALESCE(show_user_charts_global, 1),
                 show_user_charts_company = COALESCE(show_user_charts_company, 1),
                 show_user_charts_user = COALESCE(show_user_charts_user, 1)
             WHERE id = 1
@@ -581,19 +584,20 @@ def admin_get_app_settings():
     cur.execute("SELECT * FROM app_settings WHERE id=1")
     row = cur.fetchone()
     conn.close()
-    return row
+    return dict(row) if row else {}
 
 
 # Admin: update app settings
-def admin_update_app_settings(version, show_version, show_page_name, show_module_tree, show_cut_icon, show_label_edit, show_task_charts, show_risk_matrix, show_user_banner, show_user_charts_global, show_user_charts_company, show_user_charts_user, show_validation_notes):
+def admin_update_app_settings(app_name, version, show_version, show_page_name, show_module_tree, show_cut_icon, show_label_edit, show_task_charts, show_risk_matrix, show_user_banner, show_user_charts_global, show_user_charts_company, show_user_charts_user, show_validation_notes):
     """Persist the main app setting flags and version string."""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("""
         UPDATE app_settings
-        SET version=?, show_version=?, show_page_name=?, show_module_tree=?, show_cut_icon=?, show_label_edit=?, show_task_charts=?, show_risk_matrix=?, show_user_banner=?, show_user_charts_global=?, show_user_charts_company=?, show_user_charts_user=?, show_validation_notes=?
+        SET app_name=?, version=?, show_version=?, show_page_name=?, show_module_tree=?, show_cut_icon=?, show_label_edit=?, show_task_charts=?, show_risk_matrix=?, show_user_banner=?, show_user_charts_global=?, show_user_charts_company=?, show_user_charts_user=?, show_validation_notes=?
         WHERE id=1
     """, (
+        app_name.strip() if app_name is not None else "",
         version,
         1 if show_version else 0,
         1 if show_page_name else 0,

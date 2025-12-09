@@ -7,6 +7,12 @@
     <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Settings</div>
     <form method="POST" class="p-4 space-y-2">
         <div class="grid grid-cols-[1fr,180px] items-center px-3 py-2 rounded bg-slate-50 text-sm">
+            <div class="text-left">App name</div>
+            <div class="text-center">
+                <input name="app_name" value="{{ settings.app_name }}" class="w-full border p-2 rounded text-sm" placeholder="Compliance Tracker">
+            </div>
+        </div>
+        <div class="grid grid-cols-[1fr,180px] items-center px-3 py-2 rounded bg-slate-50 text-sm">
             <div class="text-left">Version number</div>
             <div class="text-center">
                 <input name="version" value="{{ settings.version }}" class="w-full border p-2 rounded text-sm" placeholder="e.g. 1.0">
@@ -54,7 +60,7 @@
                 <input type="checkbox" name="show_user_banner" {% if settings.show_user_banner %}checked{% endif %} class="h-4 w-4">
             </div>
         </div>
-        <div class="flex items-center gap-2 pt-2 px-3">
+        <div class="flex items-center justify-end gap-2 pt-2 px-3">
             <button class="bg-blue-600 text-white px-4 py-2 rounded">Save</button>
         </div>
     </form>
@@ -82,7 +88,7 @@
             <input type="text" value="{{ val }}" readonly class="text-xs text-slate-600 bg-slate-50 border rounded px-2 py-1 text-center">
         </div>
         {% endfor %}
-        <div class="flex items-center justify-start gap-2 pt-2 px-3">
+        <div class="flex items-center justify-end gap-2 pt-2 px-3">
             <button class="bg-blue-600 text-white px-4 py-2 rounded">Save Chart Colors</button>
         </div>
     </form>
@@ -120,7 +126,7 @@
                 </label>
             </div>
         </div>
-        <div class="flex items-center gap-2 pt-2 px-3">
+        <div class="flex items-center justify-end gap-2 pt-2 px-3">
             <button class="bg-blue-600 text-white px-4 py-2 rounded">Save</button>
         </div>
     </form>

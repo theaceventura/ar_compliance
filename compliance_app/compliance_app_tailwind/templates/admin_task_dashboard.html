@@ -4,7 +4,7 @@
 <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-4 space-y-3 md:space-y-0">
     <div class="flex flex-col">
         <h2 class="text-xl font-semibold">
-            <span data-label-id="title-company-task-dashboard">Company Task Dashboard</span>
+            <span data-label-id="title-company-task-dashboard">Company Dashboard</span>
             {% if companies %}
                 {% if selected_company_id %}
                     - {{ (companies | selectattr('id','equalto', selected_company_id) | list | first).name if (companies | selectattr('id','equalto', selected_company_id) | list) else '' }}
@@ -27,7 +27,9 @@
     </form>
     {% else %}
     <div class="flex items-center space-x-3">
-        <a href="/dashboard?view=personal" class="text-blue-600 text-sm hover:underline">View my tasks</a>
+        <a href="/dashboard?view=personal" class="inline-flex items-center px-3 py-2 text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100">
+            View My Tasks
+        </a>
     </div>
     {% endif %}
 </div>
@@ -37,39 +39,39 @@
         <span data-label-id="heading-task-metrics">Task Metrics</span>
     </div>
     <div class="grid grid-cols-1 md:grid-cols-5 gap-3 p-2">
-        <button type="button" data-metric-target="charts" class="bg-slate-50 border border-slate-100 p-3 rounded text-center hover:border-blue-300 hover:shadow focus:outline-none focus:ring" data-summary="all">
-            <div class="text-sm text-slate-500 flex items-center justify-center gap-1">
+        <button type="button" data-metric-target="charts" class="bg-slate-50 border border-slate-200 p-3 rounded text-center hover:border-blue-300 hover:shadow focus:outline-none focus:ring" data-summary="all">
+            <div class="text-sm text-slate-600 flex items-center justify-center gap-1">
                 <span id="label-task-total" data-label-id="label-task-total">Total Tasks</span>
             </div>
             <div class="text-2xl font-semibold">{{ task_counts.total }}</div>
-            <div class="text-xs text-slate-500">Assignments: {{ assignment_counts.total }}</div>
+            <div class="text-xs text-slate-600">Assignments: {{ assignment_counts.total }}</div>
         </button>
-        <button type="button" data-metric-target="completion-card" class="bg-slate-50 border border-slate-100 p-3 rounded text-center hover:border-blue-300 hover:shadow focus:outline-none focus:ring" data-summary="completed">
-            <div class="text-sm text-slate-500 flex items-center justify-center gap-1">
+        <button type="button" data-metric-target="completion-card" class="bg-green-50 border border-green-200 p-3 rounded text-center hover:border-blue-300 hover:shadow focus:outline-none focus:ring" data-summary="completed">
+            <div class="text-sm text-green-700 flex items-center justify-center gap-1">
                 <span id="label-task-completed" data-label-id="label-task-completed">Completed</span>
             </div>
             <div class="text-2xl font-semibold text-green-700">{{ task_counts.completed }} / {{ task_counts.total }}</div>
             <div class="text-xs text-green-700">Assignments: {{ assignment_counts.completed }} / {{ assignment_counts.total }}</div>
         </button>
-        <button type="button" data-metric-target="completion-card" class="bg-slate-50 border border-slate-100 p-3 rounded text-center hover:border-blue-300 hover:shadow focus:outline-none focus:ring" data-summary="pending">
-            <div class="text-sm text-slate-500 flex items-center justify-center gap-1">
+        <button type="button" data-metric-target="completion-card" class="bg-amber-50 border border-amber-200 p-3 rounded text-center hover:border-blue-300 hover:shadow focus:outline-none focus:ring" data-summary="pending">
+            <div class="text-sm text-amber-700 flex items-center justify-center gap-1">
                 <span id="label-task-pending" data-label-id="label-task-pending">Pending</span>
             </div>
             <div class="text-2xl font-semibold text-amber-700">{{ task_counts.pending }} / {{ task_counts.total }}</div>
             <div class="text-xs text-amber-700">Assignments: {{ assignment_counts.pending }} / {{ assignment_counts.total }}</div>
         </button>
-        <button type="button" data-metric-target="completion-card" class="bg-slate-50 border border-slate-100 p-3 rounded text-center hover:border-blue-300 hover:shadow focus:outline-none focus:ring" data-summary="overdue">
-            <div class="text-sm text-slate-500 flex items-center justify-center gap-1">
+        <button type="button" data-metric-target="completion-card" class="bg-red-50 border border-red-200 p-3 rounded text-center hover:border-blue-300 hover:shadow focus:outline-none focus:ring" data-summary="overdue">
+            <div class="text-sm text-red-700 flex items-center justify-center gap-1">
                 <span id="label-task-overdue" data-label-id="label-task-overdue">Overdue</span>
             </div>
             <div class="text-2xl font-semibold text-red-700">{{ task_counts.overdue }} / {{ task_counts.total }}</div>
             <div class="text-xs text-red-700">Assignments: {{ assignment_counts.overdue }} / {{ assignment_counts.total }}</div>
         </button>
-        <button type="button" data-metric-target="user-status" class="bg-slate-50 border border-slate-100 p-3 rounded text-center hover:border-blue-300 hover:shadow focus:outline-none focus:ring" data-summary="all">
-            <div class="text-sm text-slate-500 flex items-center justify-center gap-1">
-                <span id="label-task-compliance" data-label-id="label-task-compliance">Compliance</span>
+        <button type="button" data-metric-target="user-status" class="bg-blue-50 border border-blue-200 p-3 rounded text-center hover:border-blue-300 hover:shadow focus:outline-none focus:ring" data-summary="all">
+            <div class="text-sm text-blue-700 flex items-center justify-center gap-1">
+                <span id="label-task-compliance" data-label-id="label-task-compliance">Compliance %</span>
             </div>
-            <div class="text-2xl font-semibold text-emerald-700">{{ compliance_percent }}%</div>
+            <div class="text-2xl font-semibold text-blue-700">{{ compliance_percent }}%</div>
         </button>
     </div>
     <div class="px-3 pb-3">
@@ -82,35 +84,35 @@
 <div class="bg-white shadow rounded relative mb-4" data-widget-id="admin-dashboard-user-metrics">
     <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700"><span data-label-id="heading-user-metrics">User Metrics</span></div>
     <div class="grid grid-cols-1 md:grid-cols-5 gap-3 p-2">
-        <div class="bg-slate-50 border border-slate-100 p-3 rounded text-center">
-            <div class="text-sm text-slate-500 flex items-center justify-center gap-1">
+        <div class="bg-slate-50 border border-slate-200 p-3 rounded text-center">
+            <div class="text-sm text-slate-600 flex items-center justify-center gap-1">
                 <span data-label-id="label-user-total">Total Users</span>
             </div>
             <div class="text-2xl font-semibold">{{ user_counts.total }}</div>
         </div>
-        <div class="bg-slate-50 border border-slate-100 p-3 rounded text-center">
-            <div class="text-sm text-slate-500 flex items-center justify-center gap-1">
-                <span data-label-id="label-user-complete">Complete</span>
+        <div class="bg-green-50 border border-green-200 p-3 rounded text-center">
+            <div class="text-sm text-green-700 flex items-center justify-center gap-1">
+                <span data-label-id="label-user-complete">Completed</span>
             </div>
             <div class="text-2xl font-semibold text-green-700">{{ user_counts.completed }} / {{ user_counts.total }}</div>
         </div>
-        <div class="bg-slate-50 border border-slate-100 p-3 rounded text-center">
-            <div class="text-sm text-slate-500 flex items-center justify-center gap-1">
+        <div class="bg-amber-50 border border-amber-200 p-3 rounded text-center">
+            <div class="text-sm text-amber-700 flex items-center justify-center gap-1">
                 <span data-label-id="label-user-pending">Pending</span>
             </div>
             <div class="text-2xl font-semibold text-amber-700">{{ user_counts.pending }} / {{ user_counts.total }}</div>
         </div>
-        <div class="bg-slate-50 border border-slate-100 p-3 rounded text-center">
-            <div class="text-sm text-slate-500 flex items-center justify-center gap-1">
+        <div class="bg-red-50 border border-red-200 p-3 rounded text-center">
+            <div class="text-sm text-red-700 flex items-center justify-center gap-1">
                 <span data-label-id="label-user-overdue">Overdue</span>
             </div>
             <div class="text-2xl font-semibold text-red-700">{{ user_counts.overdue }} / {{ user_counts.total }}</div>
         </div>
-        <div class="bg-slate-50 border border-slate-100 p-3 rounded text-center">
-            <div class="text-sm text-slate-500 flex items-center justify-center gap-1">
+        <div class="bg-blue-50 border border-blue-200 p-3 rounded text-center">
+            <div class="text-sm text-blue-700 font-semibold flex items-center justify-center gap-1">
                 <span data-label-id="label-user-compliance">Compliance %</span>
             </div>
-            <div class="text-2xl font-semibold text-emerald-700">{{ user_counts.compliance }}%</div>
+            <div class="text-2xl font-semibold text-blue-700">{{ user_counts.compliance }}%</div>
         </div>
     </div>
     <div class="px-3 pb-3">
@@ -203,7 +205,7 @@
                                     <span class="text-amber-700 font-semibold">Pending</span>
                                 {% endif %}
                             </div>
-                            <div class="text-center">{{ t.due_date or '—' }}</div>
+                            <div class="text-center">{{ t.due_display or t.due_date or '—' }}</div>
                             <div class="text-center text-slate-700">{{ t.assign_completed }}/{{ t.assign_total }}</div>
                         </div>
                     {% endfor %}

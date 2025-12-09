@@ -90,11 +90,21 @@ function user_rollup(company_id):
 - Charts (Chart.js) for severity/impact/completion; risk matrix.
 - CSV export for reports.
 - Overdue highlighting and compliance metrics.
+- Configurable UI controls: editable labels, color palettes, show/hide toggles for charts/risk matrix/user banners, and editable app name.
+- Drill-down dashboards: tiles → popups; company/user/task rollups; global vs company scope.
+- Admin CRUD UX: list-only by default, inline row limits, forms appear only on New/Edit, consistent controls across Users/Companies/Tasks, and per-role menu visibility.
 
 ## 7. Future improvement (if time)
 - Optional JSON/CSV import/export mode to mirror the basic storage requirement.
 - Email notifications for overdue tasks.
 - Automated tests (pytest) for rollups and assignment sync.
+- Hardened validation on setup screens (company can’t go inactive with active users, etc.) and migration to a test suite.
 
 ## TODO (parked)
 - Planned task metadata expansion (question_type, response_options, impact_weight, severity_weight, risk_band, domain, alignment, acs_alignment) and Excel importer for Cyber_Readiness_Master_v2.xlsx. Deferred until design is finalized.
+
+## Evidence toward rubric
+- Analysis/structure: problem definition, assumptions, data model, core flows, test plan captured above; add a brief test-results table when you run the scenarios.
+- Creative approach: configurable branding/palettes/labels, drill-down dashboards, risk matrix, role-aware UI toggles.
+- Programming concepts: lightweight migrations, context processor for global settings, helper-based rollups, palette parsing, role-based decorators, consistent CRUD patterns.
+- Correctness/documentation: add a short manual test log (pass/fail) for each case in section 5; docstrings are being added to non-obvious helpers; keep sqlite Row→dict conversions to avoid `.get` errors.

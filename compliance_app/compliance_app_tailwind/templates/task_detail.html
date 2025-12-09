@@ -35,25 +35,25 @@
     <div class="grid grid-cols-1 md:grid-cols-5 gap-3 text-sm text-slate-700">
         {% set status_bg = 'bg-green-50 border-green-200 text-green-800' if is_completed else ('bg-amber-50 border-amber-200 text-amber-800') %}
         <div class="border rounded p-3 shadow-sm text-center min-h-[80px] flex flex-col justify-center {{ status_bg }}">
-            <div class="text-xs uppercase tracking-wide text-slate-600">Status</div>
+            <div class="text-sm text-slate-600">Status</div>
             <div class="mt-2 text-xl font-semibold">
                 {{ "Completed" if is_completed else "Pending" }}
             </div>
         </div>
         <div class="bg-slate-50 border border-slate-200 rounded p-3 shadow-sm text-center min-h-[80px] flex flex-col justify-center">
-            <div class="text-xs uppercase tracking-wide text-slate-500">Due Date</div>
+            <div class="text-sm text-slate-600">Due Date</div>
             <div class="mt-2 text-xl font-semibold text-slate-800">{{ due_date_display or "—" }}</div>
         </div>
         <div class="bg-slate-50 border border-slate-200 rounded p-3 shadow-sm text-center min-h-[80px] flex flex-col justify-center">
-            <div class="text-xs uppercase tracking-wide text-slate-500">Completed On</div>
+            <div class="text-sm text-slate-600">Completed On</div>
             <div class="mt-2 text-xl font-semibold text-slate-800">{{ completed_at_display or "—" }}</div>
         </div>
         <div class="bg-red-50 border border-red-100 rounded p-3 shadow-sm text-center min-h-[80px] flex flex-col justify-center">
-            <div class="text-xs uppercase tracking-wide text-red-700">Severity</div>
+            <div class="text-sm text-red-700">Severity</div>
             <div class="mt-2 text-xl font-semibold text-red-800">{{ task.severity or "Unspecified" }}</div>
         </div>
         <div class="bg-blue-50 border border-blue-100 rounded p-3 shadow-sm text-center min-h-[80px] flex flex-col justify-center">
-            <div class="text-xs uppercase tracking-wide text-blue-700">Impact</div>
+            <div class="text-sm text-blue-700">Impact</div>
             <div class="mt-2 text-xl font-semibold text-blue-800">{{ task.impact or "Unspecified" }}</div>
         </div>
     </div>
