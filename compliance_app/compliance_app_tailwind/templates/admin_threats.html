@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto bg-white shadow p-6 rounded relative space-y-5">
+    <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div>
+            <h2 class="text-2xl font-semibold text-slate-900 leading-tight">Threat Ingestion</h2>
+            <p class="text-sm text-slate-600">Fetch and review external threat/advisory feeds.</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {% for key,label in [('cisa','CISA-KEV'),('acsc','ACSC'),('msrc','MSRC'),('nvd','NVD')] %}
+        {% set stat = stats.get(label, {}) %}
+        {% set ok = stat.count and stat.count > 0 %}
+        {% set status_entry = last_errors.get(key) or {} %}
+        {% set err = status_entry.get('error') %}
+        {% set status_class = 'bg-green-500' if ok else ('bg-red-500' if err else 'bg-amber-500') %}
+        {% set status_text = 'OK' if ok else (err or 'Never fetched / no data yet') %}
+        {% set last_checked = status_entry.get('checked_at') %}
+        {% set progress = status_entry.get('progress') %}
+        {% set msg = status_entry.get('message') %}
+        <div class="bg-slate-50 border border-slate-200 rounded p-4 flex items-start justify-between">
+            <div>
+                <div class="flex items-center gap-2">
+                    <div class="w-3 h-3 rounded-full {{ status_class }}" title="{{ status_text }}"></div>
+                    <div class="text-sm font-semibold text-slate-800">{{ feed_labels.get(key, label) }}</div>
+                </div>
+                <div class="text-xs text-slate-600">Last run: {{ stat.last_created_fmt or stat.last_created or '—' }}</div>
+                <div class="text-xs text-slate-600">Total ingested: {{ stat.count or 0 }}</div>
+                <div class="text-xs text-slate-600">Last check: {{ last_checked or '—' }}</div>
+                {% if msg %}
+                <div class="text-xs text-slate-700">Status: {{ msg }}</div>
+                {% endif %}
+                {% if err %}
+                <div class="text-xs text-red-700 font-semibold">Last error: {{ err }}</div>
+                {% elif not ok %}
+                <div class="text-xs text-amber-700 font-semibold">Reason: Never fetched / no data ingested yet.</div>
+                {% endif %}
+                {% if progress is not none %}
+                <div class="mt-2">
+                    <div class="h-2 bg-slate-200 rounded-full overflow-hidden">
+                        <div class="h-2 bg-blue-500" style="width: {{ progress if progress<=100 else 100 }}%"></div>
+                    </div>
+                    <div class="text-[11px] text-slate-600 mt-0.5">{{ progress }}% complete</div>
+                </div>
+                {% endif %}
+            </div>
+            <div class="flex flex-col gap-2">
+                <form method="POST" action="/admin/threats/check/">
+                    <input type="hidden" name="source" value="{{ key }}">
+                    <button class="bg-slate-200 text-slate-800 px-3 py-2 rounded text-sm w-full">Check</button>
+                </form>
+                <form method="POST" action="/admin/threats/fetch/">
+                    <input type="hidden" name="source" value="{{ key }}">
+                    <button class="bg-blue-600 text-white px-3 py-2 rounded text-sm w-full">Fetch</button>
+                </form>
+                <form method="POST" action="/admin/threats/delete/" onsubmit="return confirm('Delete all threats for {{ feed_labels.get(key,label) }}?');">
+                    <input type="hidden" name="source" value="{{ label }}">
+                    <button class="bg-red-100 text-red-800 px-3 py-2 rounded text-sm w-full border border-red-200">Delete</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="bg-slate-50 border border-slate-100 rounded p-3 text-sm overflow-x-auto relative" data-widget-id="admin-threats-summary">
+        <div class="text-sm font-semibold text-slate-800 mb-2">Ingestion Summary</div>
+        <div class="tbl-header text-sm grid grid-cols-[2.1fr,1.2fr,0.55fr,0.55fr,0.55fr,0.55fr] gap-1.5 font-semibold text-slate-700 min-w-[780px] items-center">
+            <div class="text-left pl-1">Feed</div>
+            <div class="text-center">Last run</div>
+            <div class="text-center">Today</div>
+            <div class="text-center">Week</div>
+            <div class="text-center">Month</div>
+            <div class="text-center">Total</div>
+        </div>
+        <div class="mt-2 space-y-1">
+            {% for key,label in [('cisa','CISA-KEV'),('acsc','ACSC'),('msrc','MSRC'),('nvd','NVD')] %}
+            {% set stat = stats.get(label, {}) %}
+            {% set last_run = stat.last_created_fmt or stat.last_created or '—' %}
+            {% set status_entry = last_errors.get(key) or {} %}
+            {% set has_data = stat.count and stat.count > 0 %}
+            {% set err = status_entry.get('error') %}
+            {% set row_class = 'bg-white' %}
+            {% if err %}
+                {% set row_class = 'bg-red-50' %}
+            {% elif has_data %}
+                {% set row_class = 'bg-green-50' %}
+            {% endif %}
+            <div class="tbl-row text-sm grid grid-cols-[2.1fr,1.2fr,0.55fr,0.55fr,0.55fr,0.55fr] gap-1.5 items-center text-slate-700 min-w-[780px] border border-slate-100 rounded px-3 py-2 {% if loop.index0 % 2 == 1 %}tbl-row-alt{% endif %} {{ row_class }}">
+                <div class="text-left pl-1 font-medium">{{ feed_labels.get(key, label) }}</div>
+                <div class="whitespace-nowrap text-center">{{ last_run }}</div>
+                <div class="text-center">{{ stat.today or 0 }}</div>
+                <div class="text-center">{{ (stat.week or 0) }}</div>
+                <div class="text-center">{{ (stat.month or 0) }}</div>
+                <div class="text-center">{{ stat.count or 0 }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="bg-slate-50 border border-slate-100 rounded p-3 text-sm space-y-3" data-widget-id="admin-threats-list">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+                <div class="text-sm font-semibold text-slate-800">Threat Listing</div>
+            </div>
+            <form method="GET" class="flex flex-col sm:flex-row gap-2 sm:items-center">
+                <div class="flex items-center gap-2">
+                    <label class="text-sm text-slate-700">Source</label>
+                    <select name="source" class="border rounded px-2 py-1 text-sm">
+                        <option value="none" {% if not source or source=='none' %}selected{% endif %}>None</option>
+                        <option value="all" {% if source=='all' %}selected{% endif %}>All</option>
+                        {% for s in sources %}
+                            <option value="{{ s }}" {% if source==s %}selected{% endif %}>{{ s }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="flex items-center gap-2">
+                    <label class="text-sm text-slate-700">Severity</label>
+                    <select name="severity" class="border rounded px-2 py-1 text-sm">
+                        <option value="all" {% if not severity or severity=='all' %}selected{% endif %}>All</option>
+                        <option value="Critical" {% if severity=='Critical' %}selected{% endif %}>Critical</option>
+                        <option value="High" {% if severity=='High' %}selected{% endif %}>High</option>
+                        <option value="Medium" {% if severity=='Medium' %}selected{% endif %}>Medium</option>
+                        <option value="Low" {% if severity=='Low' %}selected{% endif %}>Low</option>
+                    </select>
+                </div>
+                <div class="flex items-center gap-2">
+                    <label class="text-sm text-slate-700">Search</label>
+                    <input type="text" name="q" value="{{ q }}" class="border rounded px-2 py-1 text-sm" placeholder="title, summary, CVE">
+                </div>
+                <button class="bg-slate-100 border border-slate-200 px-3 py-2 rounded text-sm text-slate-700">Apply</button>
+            </form>
+        </div>
+
+        <div class="bg-white border border-slate-100 rounded p-3 overflow-x-auto">
+        <div class="tbl-header text-sm grid grid-cols-[3.2fr,0.8fr,0.8fr,0.65fr,0.65fr,0.7fr] gap-1.5 items-center min-w-[780px]">
+            <div class="text-left pl-1">Title</div>
+            <div class="text-left pl-1 whitespace-nowrap">CVE</div>
+            <div class="text-center">Source</div>
+            <div class="text-center">Type</div>
+            <div class="text-center">Severity</div>
+            <div class="text-center whitespace-nowrap">Published</div>
+        </div>
+        <div class="space-y-2 mt-2">
+            {% if threats and (source and source!='none') %}
+                {% for t in threats %}
+                    {% set sev = (t.severity or '')|lower %}
+                    {% set sev_class = 'text-slate-700' %}
+                    {% set row_bg = 'bg-white' %}
+                    {% set row_title = t.title or t.summary or t.cve_id or ('Threat ' ~ t.id) %}
+                    {% if 'critical' in sev %}
+                        {% set sev_class = 'text-red-800 font-semibold' %}
+                        {% set row_bg = 'bg-red-100' %}
+                    {% elif 'high' in sev %}
+                        {% set sev_class = 'text-orange-800 font-semibold' %}
+                        {% set row_bg = 'bg-orange-100' %}
+                    {% elif 'medium' in sev %}
+                        {% set sev_class = 'text-amber-800 font-semibold' %}
+                        {% set row_bg = 'bg-amber-100' %}
+                    {% elif 'low' in sev %}
+                        {% set sev_class = 'text-green-800 font-semibold' %}
+                        {% set row_bg = 'bg-green-100' %}
+                    {% endif %}
+                    <div class="tbl-row text-sm grid grid-cols-[3.2fr,0.8fr,0.8fr,0.65fr,0.65fr,0.7fr] gap-1.5 items-center px-3 py-2 rounded {% if loop.index0 % 2 == 1 %}tbl-row-alt{% endif %} {{ row_bg }} border border-slate-100 min-w-[780px]">
+                        <div class="text-blue-700 truncate pl-1"><a href="/admin/threats/{{ t.id }}?source={{ source }}&q={{ q }}&severity={{ severity }}&page={{ pagination.page }}" class="hover:underline">{{ row_title }}</a></div>
+                        <div class="text-slate-700 whitespace-nowrap pl-1">{{ t.cve_id or "—" }}</div>
+                        <div class="text-slate-700 text-center">{{ t.source }}</div>
+                        <div class="text-slate-700 text-center">{{ t.item_type }}</div>
+                        <div class="{{ sev_class }} text-center">{{ t.severity or "—" }}</div>
+                        <div class="text-slate-600 whitespace-nowrap pl-1">{{ t.published_fmt or "—" }}</div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <div class="tbl-empty text-sm">No threats loaded. Select a source or search, then Apply.</div>
+            {% endif %}
+        </div>
+        {% if threats and (source and source!='none') %}
+        {% set pg = pagination %}
+        <div class="flex items-center justify-between mt-3 text-xs text-slate-700">
+            <div>Page {{ pg.page }} of {{ pg.total_pages }} ({{ pg.per_page }} per page)</div>
+            <div class="flex items-center gap-2">
+                <form method="GET">
+                    <input type="hidden" name="source" value="{{ source }}">
+                    <input type="hidden" name="q" value="{{ q }}">
+                    <input type="hidden" name="severity" value="{{ severity }}">
+                    <input type="hidden" name="page" value="{{ pg.page-1 if pg.page>1 else 1 }}">
+                    <button class="px-2 py-1 border rounded text-slate-700 {% if pg.page<=1 %}opacity-50 cursor-not-allowed{% endif %}" {% if pg.page<=1 %}disabled{% endif %}>Prev</button>
+                </form>
+                <form method="GET">
+                    <input type="hidden" name="source" value="{{ source }}">
+                    <input type="hidden" name="q" value="{{ q }}">
+                    <input type="hidden" name="severity" value="{{ severity }}">
+                    <input type="hidden" name="page" value="{{ pg.page+1 if pg.page<pg.total_pages else pg.total_pages }}">
+                    <button class="px-2 py-1 border rounded text-slate-700 {% if pg.page>=pg.total_pages %}opacity-50 cursor-not-allowed{% endif %}" {% if pg.page>=pg.total_pages %}disabled{% endif %}>Next</button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

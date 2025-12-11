@@ -11,21 +11,25 @@ The actual data access lives in db.py; this file focuses on request handling
 and shaping data for templates.
 """
 
-from flask import Flask, render_template, request, redirect, url_for, session, flash, Response, abort
+from flask import Flask, render_template, request, redirect, url_for, session, flash, Response, abort, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, date
 import sys
 from pathlib import Path
+import requests
+import xml.etree.ElementTree as ET
 
 # Attempt to import the package-level DB module; if import fails (e.g. when running
 # the app directly), add the project root to sys.path and retry the import.
 try:
     import compliance_app.compliance_app_tailwind.db as db
+    import compliance_app.compliance_app_tailwind.threat_ingestion as threat_ingestion
 except ImportError:
     ROOT_DIR = Path(__file__).resolve().parents[2]
     if str(ROOT_DIR) not in sys.path:
         sys.path.insert(0, str(ROOT_DIR))
     import compliance_app.compliance_app_tailwind.db as db
+    import compliance_app.compliance_app_tailwind.threat_ingestion as threat_ingestion
 
 app = Flask(__name__)
 app.secret_key = "change_this_secret_key"
@@ -429,8 +433,8 @@ def _admin_view_prepare(selected_company_id):
         "completed_users": sum(1 for r in compliance if (r.get("pending_tasks") or 0) == 0),
         "pending_users": sum(1 for r in compliance if (r.get("pending_tasks") or 0) > 0),
         "overdue_users": sum(1 for r in compliance if (r.get("overdue_tasks") or 0) > 0),
+        "compliance_pct": round((sum(1 for r in compliance if (r.get("pending_tasks") or 0) == 0) / len(compliance)) * 100, 1) if len(compliance) else 0.0,
     }
-    user_metrics["compliance_pct"] = round((user_metrics["completed_users"] / user_metrics["total_users"]) * 100, 1) if user_metrics["total_users"] else 0
 
     # Palettes
     settings_row = db.admin_get_app_settings()
@@ -2073,6 +2077,514 @@ def admin_notify_overdue():
         print(f"[Notification] To {u['username']} ({u.get('email') or 'no email'}): overdue tasks -> {', '.join(overdue)}")
     flash(f"Notifications sent to {sent} users (printed to console).")
     return redirect(url_for("admin_dashboard"))
+
+
+# Threat ingestion/admin views
+@app.route("/admin/threats", methods=["GET"])
+@admin_required
+def admin_threats():
+    """List threat objects with optional filtering."""
+    def _fmt_dt(val):
+        if not val:
+            return "—"
+        try:
+            dt = datetime.fromisoformat(val.replace("Z", "+00:00"))
+            return dt.strftime("%d/%m/%Y")
+        except Exception:
+            return val
+
+    source = request.args.get("source") or ""
+    source_map = {"msrc": "MSRC", "microsoft": "MSRC"}
+    source_filter = source_map.get(source.lower(), source)
+    q = request.args.get("q") or ""
+    severity = request.args.get("severity") or ""
+    # Refresh connectivity status on load
+    for _src in ["cisa", "acsc", "msrc", "nvd"]:
+        try:
+            threat_ingestion.check_source_connectivity(_src)
+        except Exception:
+            pass
+    raw_threats = db.admin_list_threats(
+        source=source_filter if source and source != "all" and source != "none" else None,
+        q=q or None,
+        severity=severity if severity and severity.lower() != "all" else None,
+    )
+    threats = []
+    for t in raw_threats:
+        row = dict(t)
+        row["published_fmt"] = _fmt_dt(row.get("published_at"))
+        threats.append(row)
+
+    # Simple pagination (default 5 per page)
+    per_page = 5
+    page = request.args.get("page", default=1, type=int)
+    total = len(threats)
+    total_pages = max((total + per_page - 1) // per_page, 1)
+    if page < 1:
+        page = 1
+    if page > total_pages:
+        page = total_pages
+    start = (page - 1) * per_page
+    end = start + per_page
+    threats_page = threats[start:end]
+    sources = ["CISA-KEV", "ACSC", "MSRC", "NVD"]
+    stats = db.admin_threat_summary(sources)
+    for _, stat in stats.items():
+        stat["last_created_fmt"] = _fmt_dt(stat.get("last_created"))
+
+    raw_status = threat_ingestion.get_last_status()
+    last_status = {}
+    for k, v in raw_status.items():
+        last_status[k] = {
+            "error": v.get("error"),
+            "checked_at": _fmt_dt(v.get("checked_at")),
+            "message": v.get("message"),
+            "progress": v.get("progress"),
+        }
+
+    feed_labels = {
+        "cisa": "CISA Known Exploited Vulnerabilities",
+        "acsc": "ACSC Alerts",
+        "msrc": "MSRC Security Updates",
+        "nvd": "NVD CVEs (High/Critical)",
+    }
+    feed_key_lookup = {v: k for k, v in feed_labels.items()}
+    feed_key_lookup.update({"CISA-KEV": "cisa", "ACSC": "acsc", "MSRC": "msrc", "NVD": "nvd"})
+    return render_template(
+        "admin_threats.html",
+        threats=threats_page,
+        source=source,
+        q=q,
+        severity=severity,
+        sources=sources,
+        stats=stats,
+        last_errors=last_status,
+        feed_labels=feed_labels,
+        feed_key_lookup=feed_key_lookup,
+        pagination={
+            "page": page,
+            "total_pages": total_pages,
+            "per_page": per_page,
+            "total": total,
+        },
+        page_name="templates/admin_threats.html",
+    )
+
+
+@app.route("/admin/threats/fetch/", methods=["POST"])
+@admin_required
+def admin_threats_fetch():
+    """Trigger ingestion for a given source and redirect back."""
+    source = (request.form.get("source") or "").lower()
+    inserted = threat_ingestion.ingest_source(source)
+    if inserted:
+        flash(f"Ingested {inserted} record(s) from {source.upper()}.")
+    else:
+        status_entry = threat_ingestion.get_last_status().get(source, {}) or {}
+        err_msg = status_entry.get("error")
+        if err_msg:
+            flash(f"No records ingested from {source.upper()}: {err_msg}")
+        else:
+            flash(f"No records ingested from {source.upper()}.")
+    return redirect(url_for("admin_threats", source=source))
+
+
+@app.route("/admin/threats/check/", methods=["POST"])
+@admin_required
+def admin_threats_check():
+    """Check connectivity for a given feed without ingesting."""
+    source = (request.form.get("source") or "").lower()
+    ok = threat_ingestion.check_source_connectivity(source)
+    err = threat_ingestion.get_last_status().get(source, {}).get("error")
+    if ok and not err:
+        flash(f"Connectivity OK for {source.upper()}.")
+    else:
+        flash(f"Connectivity issue for {source.upper()}: {err or 'Unknown error'}")
+    return redirect(url_for("admin_threats", source=source))
+
+
+@app.route("/admin/threats/delete/", methods=["POST"])
+@admin_required
+def admin_threats_delete():
+    """Delete all threats for a given source (testing only)."""
+    source = (request.form.get("source") or "").upper()
+    if not source:
+        flash("No source provided.")
+        return redirect(url_for("admin_threats"))
+    deleted = db.admin_delete_threats_by_source(source)
+    flash(f"Deleted {deleted} threat(s) from {source}.")
+    return redirect(url_for("admin_threats", source=source.lower()))
+
+
+@app.route("/admin/threats/<int:threat_id>", methods=["GET"])
+@admin_required
+def admin_threat_detail(threat_id):
+    """Show a single threat object."""
+    threat = db.admin_get_threat(threat_id)
+    if not threat:
+        return NOT_FOUND, 404
+    back_params = {
+        "source": request.args.get("source") or "",
+        "q": request.args.get("q") or "",
+        "severity": request.args.get("severity") or "",
+        "page": request.args.get("page") or "",
+    }
+    return render_template("admin_threat_detail.html", threat=threat, back_params=back_params, page_name="templates/admin_threat_detail.html")
+
+
+# Placeholder loader for threat by CVE
+def load_threat_by_cve(cve_id: str):
+    """
+    Placeholder function that loads a threat object by CVE ID.
+    Replace the body with the real query you already use in admin_threat_detail.
+    """
+    # Try by numeric id first
+    if cve_id and cve_id.isdigit():
+        found = db.admin_get_threat(int(cve_id))
+        if found:
+            return found
+    # If a dedicated lookup exists, use it; otherwise fall back to a simple query
+    if hasattr(db, "admin_get_threat_by_cve"):
+        return db.admin_get_threat_by_cve(cve_id)
+    # Minimal fallback: query by cve_id directly
+    conn = db.get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM threat_objects WHERE cve_id=?", (cve_id,))
+    row = cur.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+@app.route("/admin/threats/<cve_id>/msrc_details", methods=["GET"])
+@admin_required
+def admin_threat_msrc_details(cve_id):
+    """Return raw MSRC CVRF details for a given CVE."""
+    try:
+        threat = load_threat_by_cve(cve_id)
+    except NotImplementedError:
+        return jsonify({"ok": False, "error": "Threat lookup not implemented"}), 500
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"Threat lookup failed: {exc}"}), 500
+
+    if not threat:
+        return jsonify({"ok": False, "error": "Threat not found"}), 404
+
+    # Adapt field access if threat is a dict
+    def _get(obj, key):
+        return obj.get(key) if isinstance(obj, dict) else getattr(obj, key, None)
+
+    src = _get(threat, "source") or ""
+    is_msrc = src and ("msrc" in src.lower() or src == "Microsoft")
+    cvrf_url = _get(threat, "msrc_cvrf_url") or _get(threat, "link")
+    if not is_msrc or not cvrf_url:
+        return jsonify({"ok": False, "error": "Threat is not a Microsoft threat or has no CVRF URL"}), 400
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+        "Accept": "application/json",
+    }
+    resp = None
+    insecure = False
+    try:
+        resp = requests.get(cvrf_url, timeout=15, headers=headers)
+    except requests.exceptions.SSLError:
+        # Fallback to an insecure request for environments with SSL interception
+        try:
+            resp = requests.get(cvrf_url, timeout=15, headers=headers, verify=False)
+            insecure = True
+        except requests.exceptions.RequestException as exc:
+            return jsonify({"ok": False, "error": f"Failed to fetch Microsoft details (SSL verify off): {exc}"}), 502
+    except requests.exceptions.RequestException:
+        # Final fallback using urllib with a permissive SSL context (covers non-requests environments)
+        try:
+            import urllib.request, ssl
+
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            req = urllib.request.Request(cvrf_url, headers=headers)
+            with urllib.request.urlopen(req, timeout=20, context=ctx) as h:
+                body = h.read()
+                status = h.status
+                content_type = h.headers.get("Content-Type", "")
+            # Wrap in a simple object to mimic requests.Response where needed
+            class _RespShim:
+                def __init__(self, body, status, headers):
+                    self._body = body
+                    self.status_code = status
+                    self.headers = {"Content-Type": headers}
+                @property
+                def text(self):
+                    return self._body.decode("utf-8", errors="ignore")
+                def json(self):
+                    import json
+                    return json.loads(self.text)
+            resp = _RespShim(body, status, content_type)
+            insecure = True
+        except Exception as exc:
+            return jsonify({"ok": False, "error": f"Failed to fetch Microsoft details: {exc}"}), 502
+
+    if resp.status_code != 200:
+        return jsonify({"ok": False, "error": f"Microsoft API returned status {resp.status_code}"}), resp.status_code
+
+    content_type = resp.headers.get("Content-Type", "").lower()
+    content = None
+    summary_vulns = []
+    try:
+        if "json" in content_type:
+            try:
+                data = resp.json()
+                content = data
+                # Also pass through raw HTML/text if the service returns embedded HTML in known fields
+                if isinstance(data, dict) and "Document" in data and isinstance(data["Document"], str):
+                    content = data
+            except Exception:
+                content = resp.text
+        else:
+            raw_text = resp.text
+            # Try to parse XML CVRF into a simple JSON structure with vulnerabilities
+            try:
+                root = ET.fromstring(raw_text)
+                vulns = []
+                for vuln in root.findall(".//{*}Vulnerability"):
+                    vid = vuln.get("ID") or ""
+                    title_el = vuln.find(".//{*}Title")
+                    title = title_el.text if title_el is not None else vid
+                    desc_el = vuln.find(".//{*}Note[@Type='Description']")
+                    desc = desc_el.text if desc_el is not None else ""
+                    sev = ""
+                    score_el = vuln.find(".//{*}CVSSScoreSets/{*}ScoreSet/{*}BaseScore")
+                    if score_el is not None and score_el.text:
+                        sev = score_el.text
+                    vuln_entry = {
+                        "CVE": vid,
+                        "Title": title,
+                        "Description": desc,
+                        "Severity": sev,
+                    }
+                    vulns.append(vuln_entry)
+                content = {"Vulnerability": vulns, "Document": raw_text}
+            except Exception:
+                content = raw_text
+            # Build a simplified vulnerability summary for the UI
+            product_name_map = {}
+            if isinstance(content, dict):
+                # Build a map of ProductID -> Name from the ProductTree, if present
+                def _walk_products(node):
+                    if not node:
+                        return
+                    if isinstance(node, dict):
+                        pid = node.get("ProductID")
+                        val = node.get("Value")
+                        if pid and val:
+                            product_name_map[pid] = val
+                        # Some payloads use FullProductName arrays
+                        for key in ("Branch", "FullProductName", "Product"):
+                            child = node.get(key)
+                            if isinstance(child, list):
+                                for c in child:
+                                    _walk_products(c)
+                            elif isinstance(child, dict):
+                                _walk_products(child)
+                    elif isinstance(node, list):
+                        for item in node:
+                            _walk_products(item)
+                _walk_products(content.get("ProductTree"))
+
+                vulns = content.get("Vulnerability") or []
+                if isinstance(vulns, list):
+                    def _pick_note_desc(v):
+                        """Return the first useful note text, preferring description notes but falling back to any value."""
+                        notes = v.get("Notes") or []
+                        if not isinstance(notes, list):
+                            return ""
+                        first_with_value = ""
+                        for n in notes:
+                            if not n:
+                                continue
+                            val = n.get("Text") or n.get("Value") or n.get("Description") or ""
+                            if val and not first_with_value:
+                                first_with_value = val
+                            n_type = n.get("Type")
+                            n_title = str(n.get("Title") or "").lower()
+                            if n_type == 2 or n_title == "description":
+                                if val:
+                                    return val
+                        return first_with_value
+
+                    def _pick_threat_desc(v):
+                        threats = v.get("Threats") or []
+                        if not isinstance(threats, list):
+                            return ""
+                        for t in threats:
+                            if not t:
+                                continue
+                            desc = t.get("Description") or {}
+                            if isinstance(desc, dict):
+                                return desc.get("Value") or desc.get("Text") or ""
+                        return ""
+
+                    def _pick_severity_and_score(v):
+                        severity = v.get("Severity") or v.get("BaseSeverity") or ""
+                        score = ""
+                        vector = ""
+                        cvss_list = v.get("CVSSScoreSets") or []
+                        if isinstance(cvss_list, list) and cvss_list:
+                            s = cvss_list[0] or {}
+                            score = s.get("BaseScore") or s.get("Score") or ""
+                            vector = s.get("Vector") or s.get("VectorString") or ""
+                            if not severity:
+                                severity = s.get("BaseSeverity") or s.get("BaseSev") or ""
+                        threats = v.get("Threats") or []
+                        if not severity and isinstance(threats, list) and threats:
+                            t0 = threats[0] or {}
+                            severity = t0.get("Severity") or severity or ""
+                        return severity, score, vector
+
+                    def _pick_products(v):
+                        product_ids = []
+                        statuses = v.get("ProductStatuses") or []
+                        if isinstance(statuses, list):
+                            for st in statuses:
+                                if not st:
+                                    continue
+                                pids = st.get("ProductID") or []
+                                if isinstance(pids, list):
+                                    product_ids.extend(pids)
+                        remeds = v.get("Remediations") or []
+                        if isinstance(remeds, list):
+                            for r in remeds:
+                                if not r:
+                                    continue
+                                pids = r.get("ProductID") or []
+                                if isinstance(pids, list):
+                                    product_ids.extend(pids)
+                        return ", ".join(sorted(set(product_ids)))
+
+                    def _pick_remediations(v):
+                        remeds = v.get("Remediations") or []
+                        if not isinstance(remeds, list):
+                            return ""
+                        out = []
+                        for r in remeds:
+                            if not r:
+                                continue
+                            url = r.get("URL") or ""
+                            desc = r.get("Description") or ""
+                            if isinstance(desc, dict):
+                                desc = desc.get("Value") or desc.get("Text") or ""
+                            typ = r.get("Type")
+                            label = r.get("Name") or r.get("Title") or ""
+                            parts = [p for p in [label, desc, url] if p]
+                            if parts:
+                                out.append(" | ".join(parts))
+                            elif typ:
+                                out.append(str(typ))
+                        return "; ".join(out)
+
+                    def _pick_remediation_urls(v):
+                        remeds = v.get("Remediations") or []
+                        if not isinstance(remeds, list):
+                            return ""
+                        urls = []
+                        for r in remeds:
+                            if not r:
+                                continue
+                            url = r.get("URL")
+                            if url:
+                                urls.append(url)
+                        return "; ".join(urls)
+
+                    def _pick_remediation_types(v):
+                        remeds = v.get("Remediations") or []
+                        if not isinstance(remeds, list):
+                            return ""
+                        types = []
+                        for r in remeds:
+                            if not r:
+                                continue
+                            typ = r.get("Type")
+                            if typ is not None:
+                                types.append(str(typ))
+                        return "; ".join(types)
+
+                    def _pick_acknowledgments(v):
+                        acks = v.get("Acknowledgments") or []
+                        if not isinstance(acks, list):
+                            return ""
+                        out = []
+                        for a in acks:
+                            if not a:
+                                continue
+                            names = a.get("Names") or []
+                            orgs = a.get("Organization") or []
+                            text = []
+                            if isinstance(names, list):
+                                text.extend([n for n in names if n])
+                            if isinstance(orgs, list):
+                                text.extend([o for o in orgs if o])
+                            if text:
+                                out.append(", ".join(text))
+                        return "; ".join(out)
+
+                    def _pick_revision_history(v):
+                        revs = v.get("RevisionHistory") or []
+                        if not isinstance(revs, list):
+                            return ""
+                        parts = []
+                        for r in revs:
+                            if not r:
+                                continue
+                            num = r.get("Number") or ""
+                            date = r.get("Date") or ""
+                            desc = r.get("Description") or ""
+                            if isinstance(desc, dict):
+                                desc = desc.get("Value") or desc.get("Text") or ""
+                            piece = " | ".join([p for p in [num, date, desc] if p])
+                            if piece:
+                                parts.append(piece)
+                        return "; ".join(parts)
+
+                    for v in vulns:
+                        if not v:
+                            continue
+                        cve = v.get("CVE") or v.get("ID")
+                        sev, score, vector = _pick_severity_and_score(v)
+                        threat_text = _pick_threat_desc(v)
+                        desc = _pick_note_desc(v) or threat_text or v.get("Title") or v.get("ID") or ""
+                        if (desc or "").strip().lower() == "description":
+                            desc = ""
+                        if not desc and vector:
+                            desc = vector
+                        products = _pick_products(v)
+                        product_names = ", ".join([product_name_map.get(pid, pid) for pid in products.split(", ") if pid]) if products else ""
+                        remediations = _pick_remediations(v)
+                        remediation_urls = _pick_remediation_urls(v)
+                        remediation_types = _pick_remediation_types(v)
+                        acknowledgments = _pick_acknowledgments(v)
+                        revision_history = _pick_revision_history(v)
+                        summary_vulns.append({
+                            "cve": cve,
+                            "severity": sev,
+                            "score": score,
+                            "vector": vector,
+                            "threat": threat_text,
+                            "description": desc,
+                            "discovery_date": v.get("DiscoveryDate") or "",
+                            "release_date": v.get("ReleaseDate") or "",
+                            "cwe": v.get("CWE") or "",
+                            "products": products,
+                            "product_names": product_names,
+                            "remediations": remediations,
+                            "remediation_urls": remediation_urls,
+                            "remediation_types": remediation_types,
+                            "acknowledgments": acknowledgments,
+                            "revision_history": revision_history,
+                        })
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"Failed to parse Microsoft response: {exc}"}), 500
+
+    return jsonify({"ok": True, "content": content, "summary_vulns": summary_vulns, "raw_text": resp.text, "insecure": insecure})
 
 
 # Admin: user report page

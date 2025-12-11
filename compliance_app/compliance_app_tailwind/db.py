@@ -1,5 +1,5 @@
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 # Anchor the database to the project root so it is consistent regardless of the
@@ -60,6 +60,23 @@ def _create_base_tables(cur):
             verification_question TEXT,
             verification_answer TEXT,
             company_id INTEGER
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS threat_objects (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source TEXT,
+            item_type TEXT,
+            cve_id TEXT,
+            title TEXT,
+            summary TEXT,
+            link TEXT,
+            published_at TEXT,
+            severity TEXT,
+            kev_flag INTEGER DEFAULT 0,
+            products_text TEXT,
+            raw_payload TEXT,
+            created_at TEXT
         )
     """)
     cur.execute("""
@@ -124,6 +141,11 @@ def _run_migrations(cur):
         ("companies", "state", "ALTER TABLE companies ADD COLUMN state TEXT"),
         ("companies", "postcode", "ALTER TABLE companies ADD COLUMN postcode TEXT"),
         ("companies", "is_active", "ALTER TABLE companies ADD COLUMN is_active INTEGER DEFAULT 1"),
+        # threat objects table for threat ingestion
+        ("threat_objects", "kev_flag", "ALTER TABLE threat_objects ADD COLUMN kev_flag INTEGER DEFAULT 0"),
+        ("threat_objects", "products_text", "ALTER TABLE threat_objects ADD COLUMN products_text TEXT"),
+        ("threat_objects", "raw_payload", "ALTER TABLE threat_objects ADD COLUMN raw_payload TEXT"),
+        ("threat_objects", "created_at", "ALTER TABLE threat_objects ADD COLUMN created_at TEXT"),
     ]
 
     for item in migrations:
@@ -271,9 +293,31 @@ def create_tables_if_needed():
     _ensure_task_field_descriptions(cur)
     _ensure_default_company_and_admin(cur)
     _seed_impact_severity_defaults(cur)
+    _seed_threat_table_defaults(cur)
 
     conn.commit()
     conn.close()
+
+# Threat ingestion helpers
+def _seed_threat_table_defaults(cur):
+    """Ensure the threat_objects table exists (legacy safety)."""
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS threat_objects (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source TEXT,
+            item_type TEXT,
+            cve_id TEXT,
+            title TEXT,
+            summary TEXT,
+            link TEXT,
+            published_at TEXT,
+            severity TEXT,
+            kev_flag INTEGER DEFAULT 0,
+            products_text TEXT,
+            raw_payload TEXT,
+            created_at TEXT
+        )
+    """)
 
 # Set a specific user's password (already hashed)
 def set_user_password(user_id, hashed_password):
@@ -628,6 +672,132 @@ def admin_update_chart_palettes(severity_palette, impact_palette, completion_pal
     """, (severity_palette, impact_palette, completion_palette))
     conn.commit()
     conn.close()
+
+# Threat queries
+def admin_list_threats(source=None, q=None, severity=None):
+    """Return a list of threat_objects filtered by source, severity, and optional search term."""
+    conn = get_connection()
+    cur = conn.cursor()
+    base = "SELECT * FROM threat_objects WHERE 1=1"
+    params = []
+    if source:
+        base += " AND source=?"
+        params.append(source)
+    if severity:
+        base += " AND LOWER(severity)=LOWER(?)"
+        params.append(severity)
+    if q:
+        like = f"%{q}%"
+        base += " AND (title LIKE ? OR summary LIKE ? OR cve_id LIKE ?)"
+        params.extend([like, like, like])
+    base += " ORDER BY published_at DESC"
+    cur.execute(base, params)
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+def admin_threat_stats(sources=None):
+    """Return counts and last ingested timestamps per source."""
+    conn = get_connection()
+    cur = conn.cursor()
+    stats = {}
+    source_filter = ""
+    params = []
+    if sources:
+        placeholders = ",".join("?" for _ in sources)
+        source_filter = f" WHERE source IN ({placeholders})"
+        params = list(sources)
+    cur.execute(
+        f"""
+        SELECT source, COUNT(*) as cnt, MAX(created_at) as last_created
+        FROM threat_objects
+        {source_filter}
+        GROUP BY source
+        """,
+        params,
+    )
+    for row in cur.fetchall():
+        stats[row["source"]] = {
+            "count": row["cnt"],
+            "last_created": row["last_created"],
+        }
+    conn.close()
+    return stats
+
+def admin_threat_summary(sources):
+    """Return counts and last ingested timestamps plus time-bucket counts per source."""
+    conn = get_connection()
+    cur = conn.cursor()
+    now = datetime.utcnow()
+    today_start = datetime(now.year, now.month, now.day)
+    week_start = now - timedelta(days=7)
+    month_start = now - timedelta(days=30)
+    summary = {}
+    for src in sources:
+        # overall count and last created
+        cur.execute(
+            """
+            SELECT COUNT(*) as cnt, MAX(created_at) as last_created
+            FROM threat_objects WHERE source=?
+            """,
+            (src,),
+        )
+        row = cur.fetchone()
+        row = dict(row) if row else {}
+        total = row.get("cnt") or 0
+        last_created = row.get("last_created")
+        # buckets
+        cur.execute(
+            """
+            SELECT
+                SUM(created_at >= ?) AS today_cnt,
+                SUM(created_at >= ?) AS week_cnt,
+                SUM(created_at >= ?) AS month_cnt
+            FROM threat_objects
+            WHERE source=?
+            """,
+            (
+                today_start.isoformat(),
+                week_start.isoformat(),
+                month_start.isoformat(),
+                src,
+            ),
+        )
+        buckets = cur.fetchone()
+        buckets = dict(buckets) if buckets else {}
+        summary[src] = {
+            "count": total,
+            "last_created": last_created,
+            "today": buckets.get("today_cnt") or 0,
+            "week": buckets.get("week_cnt") or 0,
+            "month": buckets.get("month_cnt") or 0,
+        }
+    conn.close()
+    return summary
+
+def admin_get_threat(threat_id):
+    """Return a single threat_object by id."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM threat_objects WHERE id=?", (threat_id,))
+    row = cur.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def admin_delete_threats_by_source(source):
+    """Delete all threat_objects for a given source (for testing). Returns count deleted."""
+    if not source:
+        return 0
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) AS cnt FROM threat_objects WHERE source=?", (source,))
+    row = cur.fetchone()
+    count = row["cnt"] if row else 0
+    cur.execute("DELETE FROM threat_objects WHERE source=?", (source,))
+    conn.commit()
+    conn.close()
+    return count
 
 
 # Palette helpers

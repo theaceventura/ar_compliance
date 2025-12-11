@@ -1,0 +1,446 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto bg-white shadow p-6 rounded relative space-y-5" data-widget-id="admin-threat-detail">
+    <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        {% set display_title = threat.title or threat.summary or threat.cve_id or ("Threat " ~ threat.id) %}
+        <div>
+            <h2 class="text-2xl font-semibold text-slate-900 leading-tight">{{ display_title }}</h2>
+            <p class="text-sm text-slate-600">Source: {{ threat.source }} • Type: {{ threat.item_type }}</p>
+        </div>
+        <div class="flex flex-col sm:flex-row gap-2">
+            {% set b = back_params or {} %}
+            <a href="{{ url_for('admin_threats', source=b.get('source',''), q=b.get('q',''), severity=b.get('severity',''), page=b.get('page','')) }}" class="inline-flex items-center px-3 py-2 text-sm font-semibold text-slate-700 bg-slate-100 border border-slate-200 rounded hover:bg-slate-200">
+                ← Back to threats
+            </a>
+            {% set is_msrc = threat.source and ('msrc' in threat.source|lower or threat.source == 'Microsoft') %}
+            {% if is_msrc %}
+            {% set msrc_ident = threat.cve_id or threat.id %}
+            <button id="btn-msrc-details" data-cve="{{ msrc_ident }}" class="inline-flex items-center px-3 py-2 text-sm font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded hover:bg-indigo-100">
+                View MSRC CVRF
+            </button>
+            {% endif %}
+            <a href="{{ threat.link }}" target="_blank" rel="noopener" class="inline-flex items-center px-3 py-2 text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100">
+                Open Link
+            </a>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-slate-700">
+        <div class="bg-slate-50 border border-slate-100 rounded p-3">
+            <div class="font-semibold text-slate-800 mb-1">CVE</div>
+            <div>{{ threat.cve_id or "—" }}</div>
+        </div>
+        <div class="bg-slate-50 border border-slate-100 rounded p-3">
+            <div class="font-semibold text-slate-800 mb-1">Severity</div>
+            <div>{{ threat.severity or "—" }}</div>
+        </div>
+        <div class="bg-slate-50 border border-slate-100 rounded p-3">
+            <div class="font-semibold text-slate-800 mb-1">Published</div>
+            <div>{{ threat.published_at or "—" }}</div>
+        </div>
+        <div class="bg-slate-50 border border-slate-100 rounded p-3">
+            <div class="font-semibold text-slate-800 mb-1">KEV Flag</div>
+            <div>{{ "Yes" if threat.kev_flag else "No" }}</div>
+        </div>
+        <div class="bg-slate-50 border border-slate-100 rounded p-3 md:col-span-2">
+            <div class="font-semibold text-slate-800 mb-1">Summary</div>
+            <div class="whitespace-pre-wrap">{{ threat.summary or "—" }}</div>
+        </div>
+        <div class="bg-slate-50 border border-slate-100 rounded p-3 md:col-span-2">
+            <div class="font-semibold text-slate-800 mb-1">Products</div>
+            <div class="whitespace-pre-wrap">{{ threat.products_text or "—" }}</div>
+        </div>
+        <div class="bg-slate-50 border border-slate-100 rounded p-3 md:col-span-2">
+            <div class="font-semibold text-slate-800 mb-1">All Fields</div>
+            <div class="text-xs text-slate-700 space-y-1">
+                {% for k, v in threat.items() %}
+                    <div class="grid grid-cols-[160px,1fr] gap-2 items-start border-b border-slate-100 pb-1">
+                        <div class="font-semibold">{{ k }}</div>
+                        <div class="whitespace-pre-wrap break-words">{{ v }}</div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="bg-slate-50 border border-slate-100 rounded p-3 md:col-span-2">
+            <div class="font-semibold text-slate-800 mb-1">Raw Payload</div>
+            <pre class="text-xs bg-white border border-slate-200 rounded p-3 overflow-x-auto whitespace-pre-wrap">{{ threat.raw_payload }}</pre>
+        </div>
+    </div>
+
+    {% if is_msrc %}
+    <div id="msrcModal" class="fixed inset-0 bg-slate-900/40 hidden z-50 overflow-y-auto">
+        <div class="min-h-full flex items-start justify-center p-4">
+            <div class="bg-white rounded shadow-lg max-w-4xl w-full max-h-[90vh] overflow-hidden">
+                <div class="flex items-center justify-between px-4 py-3 border-b border-slate-200 sticky top-0 bg-white">
+                    <div class="font-semibold text-slate-800 text-sm">MSRC CVRF Details</div>
+                    <button id="msrcClose" class="text-slate-500 hover:text-slate-700 text-sm">✕</button>
+                </div>
+                <div class="p-4 overflow-y-auto text-xs font-mono whitespace-pre-wrap max-h-[85vh]" id="msrcContent"></div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{% if is_msrc %}
+<script>
+(function() {
+    const btn = document.getElementById("btn-msrc-details");
+    const modal = document.getElementById("msrcModal");
+    const closeBtn = document.getElementById("msrcClose");
+    const content = document.getElementById("msrcContent");
+    function pickTable(html) {
+        try {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, "text/html");
+            const tables = Array.from(doc.querySelectorAll("table"));
+            if (!tables.length) return null;
+            // choose the table with the most columns (then most rows)
+            let best = null;
+            let bestScore = -1;
+            tables.forEach(t => {
+                const headerCells = Array.from(t.querySelectorAll("thead th, thead td"));
+                const bodyRows = Array.from(t.querySelectorAll("tbody tr"));
+                let rows = bodyRows;
+                let headers = headerCells.map(c => c.textContent.trim());
+                if (!headers.length) {
+                    const allRows = Array.from(t.querySelectorAll("tr"));
+                    if (allRows.length) {
+                        headers = Array.from(allRows[0].querySelectorAll("th,td")).map(c => c.textContent.trim());
+                        rows = allRows.slice(1);
+                    }
+                }
+                const rowData = rows.map(r => Array.from(r.querySelectorAll("td")).map(c => c.textContent.trim()));
+                const colCount = Math.max(headers.length, ...(rowData.map(r => r.length)));
+                const score = colCount * 1000 + rowData.length; // prioritize columns, then rows
+                if (score > bestScore) {
+                    bestScore = score;
+                    best = { headers, rows: rowData };
+                }
+            });
+            return best;
+        } catch (e) {
+            return null;
+        }
+    }
+    function hide() { modal.classList.add("hidden"); }
+    function show() { modal.classList.remove("hidden"); }
+    btn?.addEventListener("click", async () => {
+        content.innerHTML = "<div class='text-slate-600'>Loading...</div>";
+        show();
+        try {
+            const cve = btn.dataset.cve;
+            const res = await fetch(`/admin/threats/${encodeURIComponent(cve)}/msrc_details?source={{ b.get('source','') }}&q={{ b.get('q','') }}&severity={{ b.get('severity','') }}&page={{ b.get('page','') }}`);
+            const rawBody = await res.text();
+            let data;
+            try {
+                data = JSON.parse(rawBody);
+            } catch (parseErr) {
+                content.innerHTML = `<div class="text-red-700 font-semibold">Unable to parse response (status ${res.status}).</div><pre class="mt-2 text-[11px] whitespace-pre-wrap bg-slate-50 border border-slate-200 rounded p-2">${rawBody || "(empty response)"}</pre>`;
+                return;
+            }
+            if (!data.ok) {
+                content.innerHTML = `<div class="text-red-700 font-semibold">Failed to load details (${res.status}). ${data.error || ""}</div>`;
+            } else {
+                const insecureNote = data.insecure ? `<div class="mb-2 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1">Fetched from Microsoft with SSL verification disabled due to certificate issues.</div>` : "";
+                const rawText = data.raw_text || "";
+                if (typeof data.content === "object") {
+                    // Extract CVEs
+                    const cveSet = new Set();
+                    const cveRegex = /CVE-\d{4}-\d{4,7}/gi;
+                    const docHtml = typeof data.content?.Document === "string" ? data.content.Document : "";
+                    if (Array.isArray(data.content?.Vulnerability)) {
+                        data.content.Vulnerability.forEach(v => { if (v && v.CVE) cveSet.add(v.CVE); });
+                    }
+                    if (Array.isArray(data.content?.CVE)) {
+                        data.content.CVE.forEach(c => { if (c) cveSet.add(c); });
+                    }
+                    if (docHtml) {
+                        const matches = docHtml.match(cveRegex);
+                        if (matches) {
+                            matches.forEach(c => cveSet.add(c));
+                        }
+                    }
+                    const cves = Array.from(cveSet);
+                    // Prefer simplified summary from backend; fallback to raw vulnerabilities
+                    const summaryRows = Array.isArray(data.summary_vulns) && data.summary_vulns.length
+                        ? data.summary_vulns.slice(0, 200).map(v => [
+                            v.cve || "—",
+                            [v.severity, v.score].filter(Boolean).join(" / ") || "—",
+                            v.vector || "—",
+                            v.threat || "—",
+                            v.description || "—",
+                            v.discovery_date || "—",
+                            v.release_date || "—",
+                            v.cwe || "—",
+                            v.products || "—",
+                            v.product_names || "—",
+                            v.remediations || "—",
+                            v.remediation_urls || "—",
+                            v.remediation_types || "—",
+                            v.acknowledgments || "—",
+                            v.revision_history || "—",
+                        ])
+                        : null;
+                    // Build table rows from Document HTML if present
+                    let detailTable = docHtml ? pickTable(docHtml) : null;
+                    const listSection = (() => {
+                        if (!cves.length) return "";
+                        const limited = cves.slice(0, 80);
+                        const more = cves.length - limited.length;
+                        const listHtml = `<ul class="list-disc list-inside text-xs text-slate-700 space-y-0.5">
+                                ${limited.map(c => `<li>${c}</li>`).join("")}
+                            </ul>
+                            ${more > 0 ? `<div class="text-[11px] text-slate-500 mt-1">+${more} more CVEs not shown</div>` : ""}`;
+                        return `<details class="mb-2 border border-slate-200 rounded">
+                            <summary class="cursor-pointer text-xs font-semibold text-slate-800 px-2 py-1 bg-slate-50">CVEs (${cves.length})</summary>
+                            <div class="p-2">${listHtml}</div>
+                        </details>`;
+                    })();
+                    const renderDoc = docHtml ? `<div class="border border-slate-200 rounded mb-2 overflow-auto text-xs">${docHtml}</div>` : "";
+                    const tableSection = (() => {
+                        // Prefer a vulnerability table if present
+                        if (summaryRows || (Array.isArray(data.content?.Vulnerability) && data.content.Vulnerability.length)) {
+                            const headers = ["CVE", "Severity / Score", "Vector", "Threat", "Description", "Discovery", "Release", "CWE", "Products", "Product Names", "Remediations", "Remediation URLs", "Remediation Types", "Acknowledgments", "Revision History"];
+                            const rows = summaryRows || data.content.Vulnerability.slice(0, 120).map(v => {
+                                const clean = (txt) => String(txt || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+                                const cveVal = v.CVE || v.ID || "—";
+                                const toSevLabel = (scoreVal, fallback) => {
+                                    if (fallback) return fallback;
+                                    const s = typeof scoreVal === "number" ? scoreVal : parseFloat(scoreVal);
+                                    if (Number.isFinite(s)) {
+                                        if (s >= 9) return "Critical";
+                                        if (s >= 7) return "High";
+                                        if (s >= 4) return "Medium";
+                                        return "Low";
+                                    }
+                                    return "";
+                                };
+                                let severity = v.Severity || v.BaseSeverity || "";
+                                let score = "";
+                                let vector = "";
+                                if (Array.isArray(v.CVSSScoreSets) && v.CVSSScoreSets.length) {
+                                    const s = v.CVSSScoreSets[0] || {};
+                                    score = s.BaseScore ?? s.Score ?? "";
+                                    vector = s.Vector || s.VectorString || "";
+                                    if (!severity) {
+                                        severity = s.BaseSeverity || s.BaseSev || toSevLabel(score, "");
+                                    }
+                                }
+                                const threats = Array.isArray(v.Threats) ? v.Threats : [];
+                                let threatText = "";
+                                if (!severity && threats.length) {
+                                    const sevThreat = threats.find(t => t && (t.Severity || t.Type === 0 || t.Type === 1));
+                                    if (sevThreat) {
+                                        severity = sevThreat.Severity || severity || "";
+                                        if (!score && sevThreat.Score) score = sevThreat.Score;
+                                        if (!severity && sevThreat.Description && sevThreat.Description.Value) {
+                                            severity = sevThreat.Description.Value;
+                                        }
+                                    }
+                                }
+                                if (threats.length && !threatText) {
+                                    const tDesc = threats.find(t => t && t.Description && (t.Description.Value || t.Description.Text));
+                                    if (tDesc) threatText = tDesc.Description.Value || tDesc.Description.Text || threatText;
+                                }
+                                severity = severity || toSevLabel(score, "");
+                                const severityCell = [severity, score].filter(Boolean).join(" / ") || "—";
+                                let desc = "";
+                                if (Array.isArray(v.Notes)) {
+                                    const note = v.Notes.find(n => {
+                                        if (!n) return false;
+                                        if (typeof n.Type === "number") return n.Type === 2;
+                                        const typeStr = (n.Type ?? "").toString().toLowerCase();
+                                        const titleStr = (n.Title ?? "").toString().toLowerCase();
+                                        return typeStr === "description" || titleStr === "description";
+                                    }) || v.Notes[0];
+                                    if (note) desc = note.Text || note.Value || note.Description || note.Title || "";
+                                    if (desc && desc.toLowerCase() === "description") desc = "";
+                                    if (!desc) {
+                                        const anyNote = v.Notes.find(n => n && (n.Text || n.Value || n.Description));
+                                        if (anyNote) desc = anyNote.Text || anyNote.Value || anyNote.Description || "";
+                                    }
+                                }
+                                if (!desc && threatText) {
+                                    desc = threatText;
+                                }
+                                if (!desc && Array.isArray(v.CVSSScoreSets) && v.CVSSScoreSets.length) {
+                                    const s = v.CVSSScoreSets[0] || {};
+                                    desc = s.Vector || s.VectorString || desc;
+                                }
+                                if (!desc) desc = v.Title || v.ID || "";
+                                desc = clean(desc);
+                                const discovery = v.DiscoveryDate || "—";
+                                const release = v.ReleaseDate || "—";
+                                const cwe = v.CWE || "—";
+                                const products = (() => {
+                                    const ids = [];
+                                    const statuses = Array.isArray(v.ProductStatuses) ? v.ProductStatuses : [];
+                                    statuses.forEach(st => {
+                                        if (st && Array.isArray(st.ProductID)) ids.push(...st.ProductID);
+                                    });
+                                    const rems = Array.isArray(v.Remediations) ? v.Remediations : [];
+                                    rems.forEach(r => {
+                                        if (r && Array.isArray(r.ProductID)) ids.push(...r.ProductID);
+                                    });
+                                    return ids.length ? Array.from(new Set(ids)).join(", ") : "—";
+                                })();
+                                const remediations = (() => {
+                                    const rems = Array.isArray(v.Remediations) ? v.Remediations : [];
+                                    if (!rems.length) return "—";
+                                    const parts = rems.map(r => {
+                                        if (!r) return "";
+                                        let desc = r.Description;
+                                        if (desc && typeof desc === "object") {
+                                            desc = desc.Value || desc.Text || "";
+                                        }
+                                        const url = r.URL || "";
+                                        const label = r.Name || r.Title || "";
+                                        return [label, desc, url].filter(Boolean).join(" | ");
+                                    }).filter(Boolean);
+                                    return parts.length ? parts.join("; ") : "—";
+                                })();
+                                return [cveVal, severityCell, vector || "—", clean(threatText) || "—", desc || "—", discovery, release, cwe, products, remediations];
+                            });
+                            const head = headers.map(h => `<th class="px-2 py-1 text-left">${h}</th>`).join("");
+                            const body = rows.map(r => `<tr class="border-t border-slate-100">${r.map(c => `<td class="px-2 py-1 align-top">${c}</td>`).join("")}</tr>`).join("");
+                            return `<div class="border border-slate-200 rounded mb-2 overflow-x-auto">
+                                <table class="min-w-full text-xs text-slate-700">
+                                    <thead class="bg-slate-100"><tr>${head}</tr></thead>
+                                    <tbody>${body}</tbody>
+                                </table>
+                            </div>`;
+                        }
+                        if (!detailTable || !detailTable.rows.length) {
+                            return renderDoc;
+                        }
+                        let headers = (detailTable.headers && detailTable.headers.length)
+                            ? detailTable.headers
+                            : [];
+                        if (!headers.length && detailTable.rows.length) {
+                            headers = detailTable.rows[0];
+                        }
+                        const bodyRows = headers === detailTable.rows[0] ? detailTable.rows.slice(1) : detailTable.rows;
+                        const head = headers.map(h => `<th class="px-2 py-1 text-left">${h}</th>`).join("");
+                        const body = bodyRows.slice(0, 120).map(r => `<tr class="border-t border-slate-100">${r.map(c => `<td class="px-2 py-1">${c}</td>`).join("")}</tr>`).join("");
+                        return `<div class="border border-slate-200 rounded mb-2 overflow-x-auto">
+                            <table class="min-w-full text-xs text-slate-700">
+                                ${head ? `<thead class="bg-slate-100"><tr>${head}</tr></thead>` : ""}
+                                <tbody>${body}</tbody>
+                            </table>
+                        </div>`;
+                    })();
+                    const kvSection = (() => {
+                        const rows = [];
+                        for (const [k, v] of Object.entries(data.content || {})) {
+                            if (k === "Document") continue;
+                            let val = v;
+                            if (typeof v === "object") {
+                                val = `<pre class="text-[11px] whitespace-pre-wrap bg-slate-50 border border-slate-200 rounded p-2">${JSON.stringify(v, null, 2)}</pre>`;
+                            } else {
+                                val = String(v);
+                            }
+                            rows.push(`<div class="grid grid-cols-[1fr,2fr] gap-2 border-b border-slate-100 py-1">
+                                <div class="text-slate-700 font-semibold text-xs">${k}</div>
+                                <div class="text-slate-700 text-xs">${val}</div>
+                            </div>`);
+                        }
+                        return rows.join("");
+                    })();
+                    const rawBlock = docHtml ? `<div class="text-[11px] whitespace-pre-wrap bg-slate-50 border border-slate-200 rounded p-2 mt-2">${docHtml}</div>` : "";
+                    const jsonBlock = `<pre class="text-[11px] whitespace-pre-wrap bg-slate-50 border border-slate-200 rounded p-2 mt-2">${JSON.stringify(data.content, null, 2)}</pre>`;
+                    const rawFallback = rawText ? `<div class="text-[11px] whitespace-pre-wrap bg-slate-50 border border-slate-200 rounded p-2 mt-2">${rawText}</div>` : "";
+                    const docMetaSection = (() => {
+                        const esc = (s) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                        if (!data.content || typeof data.content !== "object") return "";
+                        const docTitle = esc(data.content.DocumentTitle?.Value || data.content.DocumentTitle || "");
+                        const docType = esc(data.content.DocumentType?.Value || data.content.DocumentType || "");
+                        const tracking = data.content.DocumentTracking || {};
+                        const ident = tracking.Identification || {};
+                        const publisher = data.content.DocumentPublisher || {};
+                        const notes = Array.isArray(data.content.DocumentNotes) ? data.content.DocumentNotes : [];
+                        const summaryRows = [];
+                        if (docTitle) summaryRows.push(`<div><span class="font-semibold">Title:</span> ${docTitle}</div>`);
+                        if (docType) summaryRows.push(`<div><span class="font-semibold">Type:</span> ${docType}</div>`);
+                        if (ident.ID?.Value || ident.Alias?.Value) {
+                            summaryRows.push(`<div><span class="font-semibold">ID/Alias:</span> ${esc(ident.ID?.Value || "")} ${esc(ident.Alias?.Value || "")}</div>`);
+                        }
+                        if (tracking.Version || tracking.Status) {
+                            summaryRows.push(`<div><span class="font-semibold">Version/Status:</span> ${esc(tracking.Version || "")} / ${esc(tracking.Status || "")}</div>`);
+                        }
+                        if (publisher.ContactDetails?.Value) {
+                            summaryRows.push(`<div><span class="font-semibold">Publisher Contact:</span> ${esc(publisher.ContactDetails.Value)}</div>`);
+                        }
+                        const notesBlock = notes.length ? `<details class="mt-1"><summary class="cursor-pointer text-xs font-semibold text-slate-800">Document Notes (${notes.length})</summary><div class="text-[11px] whitespace-pre-wrap bg-slate-50 border border-slate-200 rounded p-2 mt-1">${esc(JSON.stringify(notes, null, 2))}</div></details>` : "";
+                        const productTreeBlock = data.content.ProductTree ? `<details class="mt-1"><summary class="cursor-pointer text-xs font-semibold text-slate-800">Product Tree</summary><div class="text-[11px] whitespace-pre-wrap bg-slate-50 border border-slate-200 rounded p-2 mt-1">${esc(JSON.stringify(data.content.ProductTree, null, 2))}</div></details>` : "";
+                        return `<div class="border border-slate-200 rounded p-2 mb-2 bg-slate-50">
+                            <div class="text-xs font-semibold text-slate-800 mb-1">Document Metadata</div>
+                            ${summaryRows.join("") || "<div class='text-xs text-slate-600'>No metadata</div>"}
+                            ${notesBlock}
+                            ${productTreeBlock}
+                        </div>`;
+                    })();
+                    const fullEntriesSection = (() => {
+                        const esc = (s) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                        const vulns = Array.isArray(data.content?.Vulnerability) ? data.content.Vulnerability : [];
+                        if (!vulns.length) return "";
+                        const cards = vulns.map((v, idx) => {
+                            const title = esc(v.CVE || v.ID || `Vulnerability ${idx + 1}`);
+                            const sev = esc(v.Severity || v.BaseSeverity || "");
+                            const score = esc((v.CVSSScoreSets && v.CVSSScoreSets[0] && (v.CVSSScoreSets[0].BaseScore || v.CVSSScoreSets[0].Score)) || "");
+                            const json = esc(JSON.stringify(v, null, 2));
+                            return `<details class="border border-slate-200 rounded mb-2">
+                                <summary class="cursor-pointer text-xs font-semibold text-slate-800 px-2 py-1 bg-slate-50">${title}${sev || score ? ` · ${[sev, score].filter(Boolean).join(" / ")}` : ""}</summary>
+                                <pre class="text-[11px] whitespace-pre-wrap bg-slate-50 border-t border-slate-200 p-2 overflow-x-auto">${json}</pre>
+                            </details>`;
+                        }).join("");
+                        return `<div class="mt-3">
+                            <div class="text-xs font-semibold text-slate-800 mb-1">Full Vulnerability Entries (${vulns.length})</div>
+                            ${cards}
+                        </div>`;
+                    })();
+                    content.innerHTML = insecureNote + docMetaSection + (tableSection || renderDoc || "") + (listSection || "") + (kvSection || "") + fullEntriesSection + rawBlock + jsonBlock + rawFallback || "<div class='text-slate-600'>No content returned.</div>";
+                } else {
+                    const txt = data.content || "";
+                    const cveRegex = /CVE-\d{4}-\d{4,7}/gi;
+                    const picked = txt ? pickTable(txt) : null;
+                    const detailRows = picked ? [picked.headers, ...picked.rows] : [];
+                    const found = txt.match(cveRegex) || [];
+                    const unique = Array.from(new Set(found));
+                    const limited = unique.slice(0, 200);
+                    const more = unique.length - limited.length;
+                    const tableHtml = detailRows.length ? `
+                        <div class="border border-slate-200 rounded mb-2 overflow-x-auto">
+                            <table class="min-w-full text-xs text-slate-700">
+                                ${detailRows[0] ? `<thead class="bg-slate-100"><tr>${detailRows[0].map(h => `<th class="px-2 py-1 text-left">${h}</th>`).join("")}</tr></thead>` : ""}
+                                <tbody>
+                                    ${detailRows.slice(1, 60).map(r => `<tr class="border-t border-slate-100">${r.map(c => `<td class="px-2 py-1">${c}</td>`).join("")}</tr>`).join("")}
+                                </tbody>
+                            </table>
+                        </div>` : "";
+                    const listHtml = limited.length ? `
+                        <div class="mb-2">
+                            <div class="text-xs font-semibold text-slate-800">CVEs (${unique.length})</div>
+                            <ul class="list-disc list-inside text-xs text-slate-700 space-y-0.5">
+                                ${limited.map(c => `<li>${c}</li>`).join("")}
+                            </ul>
+                            ${more > 0 ? `<div class="text-[11px] text-slate-500 mt-1">+${more} more CVEs not shown</div>` : ""}
+                        </div>` : "";
+                    content.innerHTML = insecureNote + (listHtml || tableHtml || "") + `<div class="text-[11px] whitespace-pre-wrap bg-slate-50 border border-slate-200 rounded p-2">${txt}</div>`;
+                }
+            }
+        } catch (err) {
+            console.error("MSRC fetch error", err);
+            const msg = (err && err.message) ? err.message : String(err);
+            content.innerHTML = `<div class='text-red-700 font-semibold'>Error fetching details: ${msg}</div>`;
+        }
+    });
+    closeBtn?.addEventListener("click", hide);
+    modal?.addEventListener("click", (e) => {
+        if (e.target === modal) hide();
+    });
+})();
+</script>
+{% endif %}
+{% endblock %}
