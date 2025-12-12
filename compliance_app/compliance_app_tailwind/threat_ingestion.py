@@ -159,6 +159,150 @@ def _extract_products_from_nvd_configs(cve_obj):
             unique.append(p)
     return ", ".join(unique)
 
+def _parse_msrc_enrichment(raw_payload):
+    """Extract MSRC enrichment fields from stored raw payload."""
+    if not raw_payload:
+        return None
+    try:
+        data = json.loads(raw_payload) if isinstance(raw_payload, str) else raw_payload
+    except Exception:
+        return None
+    release = data.get("release") or {}
+    vuln = data.get("vulnerability") or {}
+    if not vuln:
+        return None
+    threats = vuln.get("Threats") or []
+    def _pick_threat(threat_type):
+        if not isinstance(threats, list):
+            return None
+        for t in threats:
+            try:
+                if t.get("Type") == threat_type:
+                    return t
+            except Exception:
+                continue
+        return None
+    threat_category = None
+    t0 = _pick_threat(0)
+    if t0:
+        threat_category = (t0.get("Description") or {}).get("Value") or t0.get("Description") or threat_category
+    exploitable_info = _pick_threat(1)
+    exploitable_desc = ""
+    if exploitable_info:
+        exploitable_desc = (exploitable_info.get("Description") or {}).get("Value") or exploitable_info.get("Description") or ""
+    def _parse_bool_from_str(val):
+        if val is None:
+            return False
+        sval = str(val).strip().lower()
+        return sval in ("yes", "true", "1", "y")
+    msrc_publicly_disclosed = False
+    msrc_exploited = False
+    msrc_exploitability_assessment = None
+    if exploitable_desc and isinstance(exploitable_desc, str):
+        parts = [p.strip() for p in exploitable_desc.split(";") if p.strip()]
+        for p in parts:
+            if ":" in p:
+                k, v = p.split(":", 1)
+                key = k.strip().lower()
+                if "publicly disclosed" in key:
+                    msrc_publicly_disclosed = _parse_bool_from_str(v)
+                if "exploited" in key:
+                    msrc_exploited = _parse_bool_from_str(v)
+        # keep the whole string as assessment if present
+        msrc_exploitability_assessment = exploitable_desc
+    notes = vuln.get("Notes") or []
+    msrc_summary_text = None
+    msrc_customer_action_required = False
+    affected_products = []
+    if isinstance(notes, list):
+        for n in notes:
+            title = (n.get("Title") or n.get("TitleText") or "").strip() if isinstance(n, dict) else ""
+            ntype = n.get("Type") if isinstance(n, dict) else None
+            val = ""
+            if isinstance(n, dict):
+                val = n.get("Value") or n.get("Text") or n.get("Description") or ""
+            if title.lower() == "description" and ntype == 2 and val:
+                msrc_summary_text = _strip_html(val)
+            if title.lower() == "customer action required" and ntype == 6:
+                msrc_customer_action_required = _parse_bool_from_str(val)
+            if ntype == 7 and val:
+                affected_products.append(val.strip())
+    remediations = vuln.get("Remediations") or []
+    remediation_urls = []
+    fixed_build = None
+    if isinstance(remediations, list):
+        for r in remediations:
+            if not isinstance(r, dict):
+                continue
+            if not fixed_build and r.get("FixedBuild"):
+                fixed_build = r.get("FixedBuild")
+            url = r.get("URL")
+            if url:
+                remediation_urls.append(url)
+        # prefer Security Update URL first
+        sec_urls = [r.get("URL") for r in remediations if isinstance(r, dict) and r.get("SubType") == "Security Update" and r.get("URL")]
+        if sec_urls:
+            # dedupe with preference
+            new_list = []
+            for u in sec_urls + remediation_urls:
+                if u and u not in new_list:
+                    new_list.append(u)
+            remediation_urls = new_list
+    cvss_sets = vuln.get("CVSSScoreSets") or []
+    base_score = None
+    temporal_score = None
+    vector = None
+    if isinstance(cvss_sets, list) and cvss_sets:
+        first = cvss_sets[0] or {}
+        base_score = first.get("BaseScore") or first.get("Score")
+        temporal_score = first.get("TemporalScore")
+        vector = first.get("Vector") or first.get("VectorString")
+    def _coerce_float(val):
+        try:
+            return float(val)
+        except Exception:
+            return None
+    release_current = release.get("current_release") or release.get("current_release_utc") or release.get("currentRelease") or release.get("CurrentReleaseDate") or None
+    release_initial = release.get("initial_release") or release.get("InitialReleaseDate") or None
+    title_val = vuln.get("Title")
+    msrc_title = None
+    if isinstance(title_val, dict):
+        msrc_title = title_val.get("Value") or title_val.get("Text") or title_val.get("Title")
+    elif isinstance(title_val, list) and title_val:
+        first_t = title_val[0]
+        if isinstance(first_t, dict):
+            msrc_title = first_t.get("Value") or first_t.get("Text") or first_t.get("Title")
+        else:
+            msrc_title = first_t
+    else:
+        msrc_title = title_val
+    if msrc_title is None:
+        msrc_title = vuln.get("CVE")
+    # severity threat (Type 3) fallback for threat_category
+    t3 = _pick_threat(3)
+    if not threat_category and t3:
+        threat_category = (t3.get("Description") or {}).get("Value") or t3.get("Description")
+    return {
+        "msrc_release_id": release.get("release_id") or release.get("ID") or release.get("Alias"),
+        "msrc_release_title": release.get("release_title") or release.get("DocumentTitle"),
+        "msrc_initial_release_utc": release_initial,
+        "msrc_current_release_utc": release_current,
+        "msrc_cvrf_url": release.get("cvrf_url") or release.get("CvrfUrl"),
+        "msrc_title": msrc_title,
+        "msrc_threat_category": threat_category,
+        "msrc_customer_action_required": msrc_customer_action_required,
+        "msrc_publicly_disclosed": msrc_publicly_disclosed,
+        "msrc_exploited": msrc_exploited,
+        "msrc_exploitability_assessment": msrc_exploitability_assessment,
+        "msrc_cvss_base_score": _coerce_float(base_score),
+        "msrc_cvss_temporal_score": _coerce_float(temporal_score),
+        "msrc_cvss_vector": vector,
+        "msrc_affected_products": list(dict.fromkeys([p for p in affected_products if p])),  # dedupe preserve order
+        "msrc_fixed_build": fixed_build,
+        "msrc_remediation_urls": list(dict.fromkeys([u for u in remediation_urls if u])),
+        "msrc_summary_text": msrc_summary_text,
+        "last_seen_utc": release_current or datetime.utcnow().isoformat(),
+    }
 
 def _to_datetime_from_struct(struct_time):
     if not struct_time:
@@ -307,8 +451,9 @@ def fetch_nvd_recent(days=10):
     end = datetime.utcnow()
     start = end - timedelta(days=days)
     params = {
-        "pubStartDate": start.strftime("%Y-%m-%dT%H:%M:%S.000 UTC-00:00"),
-        "pubEndDate": end.strftime("%Y-%m-%dT%H:%M:%S.000 UTC-00:00"),
+        # NVD expects ISO-8601 Zulu timestamps with full milliseconds
+        "pubStartDate": start.strftime("%Y-%m-%dT00:00:00.000Z"),
+        "pubEndDate": end.strftime("%Y-%m-%dT23:59:59.000Z"),
         "resultsPerPage": 2000,
     }
     try:
@@ -319,14 +464,19 @@ def fetch_nvd_recent(days=10):
         return {}
 
 
-def fetch_nvd_for_keywords(keywords):
-    """Fetch CVEs from NVD for each keyword (fallback when date range is empty)."""
+def fetch_nvd_for_keywords(keywords, start=None, end=None):
+    """Fetch CVEs from NVD for each keyword (optionally bounded by date)."""
     results = []
+    start_param = start.strftime("%Y-%m-%dT00:00:00.000Z") if start else None
+    end_param = end.strftime("%Y-%m-%dT23:59:59.000Z") if end else None
     for kw in keywords:
         params = {
             "keywordSearch": kw,
             "resultsPerPage": 2000,
         }
+        if start_param and end_param:
+            params["pubStartDate"] = start_param
+            params["pubEndDate"] = end_param
         try:
             resp = requests.get("https://services.nvd.nist.gov/rest/json/cves/2.0", params=params, timeout=30)
             resp.raise_for_status()
@@ -746,6 +896,19 @@ def save_threat_objects(threat_objects, source_name=None, ingest_id=None):
             enriched_at_val = existing.get("enriched_at")
             # Mark enrichment when a secondary feed updates the record
             if (obj.source or "").upper() != "NVD":
+                try:
+                    db.upsert_feed_entry(
+                        obj.cve_id,
+                        obj.source,
+                        products_text=obj.products_text,
+                        kev_flag=obj.kev_flag,
+                        raw_payload=obj.raw_payload,
+                        ingest_id=ingest_id,
+                        status="stored",
+                        message="Secondary feed entry captured",
+                    )
+                except Exception:
+                    pass
                 is_enriched_val = 1
                 enriched_at_val = now_iso
                 _track("is_enriched", is_enriched_val, existing.get("is_enriched"))
@@ -859,6 +1022,175 @@ def save_threat_objects(threat_objects, source_name=None, ingest_id=None):
     return inserted, updated, skipped_missing_base
 
 
+def process_cisa_feed(threat_objects, ingest_id=None):
+    """Fast path for CISA: store feed entries and bulk update kev_flag on master records."""
+    if not threat_objects:
+        return 0, 0
+    feed_upserted = 0
+    kev_updated = 0
+    now_iso = datetime.utcnow().isoformat()
+
+    def _parse_kev_payload(raw_payload):
+        """Extract KEV enrichment fields from the raw payload."""
+        if not raw_payload:
+            return {}
+        try:
+            data = json.loads(raw_payload) if isinstance(raw_payload, str) else raw_payload
+        except Exception:
+            return {}
+        req_action = data.get("requiredAction")
+        return {
+            "kev_date_added": data.get("dateAdded") or data.get("date_added"),
+            "kev_due_date": data.get("dueDate") or data.get("due_date"),
+            "kev_description": data.get("shortDescription") or data.get("vulnerabilityName") or data.get("description"),
+            "kev_vendor": data.get("vendorProject") or data.get("vendor"),
+            "kev_product": data.get("product"),
+            "kev_action_required": bool(req_action),
+            "kev_required_action": req_action,
+            "kev_source_url": data.get("url") or "https://www.cisa.gov/known-exploited-vulnerabilities-catalog",
+            "known_exploited": True,
+            "raw": data,
+        }
+
+    # Upsert feed entries
+    for obj in threat_objects:
+        if not obj.cve_id:
+            continue
+        kev_fields = _parse_kev_payload(obj.raw_payload)
+        try:
+            db.upsert_feed_entry(
+                obj.cve_id,
+                obj.source,
+                products_text=obj.products_text,
+                kev_flag=True,
+                raw_payload=obj.raw_payload,
+                ingest_id=ingest_id,
+                status="stored",
+                message="CISA feed entry captured",
+            )
+            feed_upserted += 1
+        except Exception:
+            continue
+        # Persist KEV enrichment details for later display
+        try:
+            db.upsert_kev_enrichment(
+                obj.cve_id,
+                kev_date_added=kev_fields.get("kev_date_added"),
+                kev_due_date=kev_fields.get("kev_due_date"),
+                kev_description=kev_fields.get("kev_description"),
+                kev_vendor=kev_fields.get("kev_vendor"),
+                kev_product=kev_fields.get("kev_product"),
+                kev_action_required=kev_fields.get("kev_action_required"),
+                kev_required_action=kev_fields.get("kev_required_action"),
+                kev_source_url=kev_fields.get("kev_source_url"),
+                known_exploited=kev_fields.get("known_exploited", True),
+                raw_payload=json.dumps(kev_fields.get("raw")) if kev_fields.get("raw") is not None else obj.raw_payload,
+                ingest_id=ingest_id,
+            )
+        except Exception:
+            pass
+    # Bulk update kev_flag on master rows (NVD)
+    conn = db.get_connection()
+    cur = conn.cursor()
+    cve_ids = [obj.cve_id for obj in threat_objects if obj.cve_id]
+    seen = set()
+    unique_cves = []
+    for cid in cve_ids:
+        up = cid.upper()
+        if up not in seen:
+            seen.add(up)
+            unique_cves.append(cid)
+    chunk_size = 200
+    for i in range(0, len(unique_cves), chunk_size):
+        chunk = unique_cves[i : i + chunk_size]
+        placeholders = ",".join("?" for _ in chunk)
+        try:
+            cur.execute(
+                f"""
+                UPDATE threat_objects
+                SET kev_flag=1,
+                    is_enriched=1,
+                    enriched_at=?,
+                    updated_at=?
+                WHERE source='NVD' AND kev_flag!=1 AND UPPER(cve_id) IN ({placeholders})
+                """,
+                [now_iso, now_iso] + [c.upper() for c in chunk],
+            )
+            kev_updated += cur.rowcount or 0
+        except Exception:
+            continue
+    conn.commit()
+    conn.close()
+    return feed_upserted, kev_updated
+
+
+def process_msrc_feed(threat_objects, ingest_id=None):
+    """Fast path for MSRC: store feed entries; defer heavy merge to re-apply."""
+    if not threat_objects:
+        return 0, 0
+    feed_upserted = 0
+    skipped = 0
+    enrichment_upserts = 0
+    # Preload existing CVEs so we skip missing base rows
+    conn = db.get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT UPPER(cve_id) as cid FROM threat_objects WHERE cve_id IS NOT NULL")
+    existing_cves = {row["cid"] for row in cur.fetchall()}
+    conn.close()
+    for obj in threat_objects:
+        if not obj.cve_id:
+            continue
+        cid = obj.cve_id.upper()
+        if cid not in existing_cves:
+            skipped += 1
+            continue
+        # Upsert enrichment for existing CVE
+        try:
+            enrich = _parse_msrc_enrichment(obj.raw_payload)
+            if enrich:
+                db.upsert_msrc_enrichment(
+                    obj.cve_id,
+                    msrc_release_id=enrich.get("msrc_release_id"),
+                    msrc_release_title=enrich.get("msrc_release_title"),
+                    msrc_initial_release_utc=enrich.get("msrc_initial_release_utc"),
+                    msrc_current_release_utc=enrich.get("msrc_current_release_utc"),
+                    msrc_cvrf_url=enrich.get("msrc_cvrf_url"),
+                    msrc_title=enrich.get("msrc_title"),
+                    msrc_threat_category=enrich.get("msrc_threat_category"),
+                    msrc_customer_action_required=enrich.get("msrc_customer_action_required"),
+                    msrc_publicly_disclosed=enrich.get("msrc_publicly_disclosed"),
+                    msrc_exploited=enrich.get("msrc_exploited"),
+                    msrc_exploitability_assessment=enrich.get("msrc_exploitability_assessment"),
+                    msrc_cvss_base_score=enrich.get("msrc_cvss_base_score"),
+                    msrc_cvss_temporal_score=enrich.get("msrc_cvss_temporal_score"),
+                    msrc_cvss_vector=enrich.get("msrc_cvss_vector"),
+                    msrc_affected_products=json.dumps(enrich.get("msrc_affected_products")) if enrich.get("msrc_affected_products") is not None else None,
+                    msrc_fixed_build=enrich.get("msrc_fixed_build"),
+                    msrc_remediation_urls=json.dumps(enrich.get("msrc_remediation_urls")) if enrich.get("msrc_remediation_urls") is not None else None,
+                    msrc_summary_text=enrich.get("msrc_summary_text"),
+                    last_seen_utc=enrich.get("last_seen_utc"),
+                    ingest_id=ingest_id,
+                )
+                enrichment_upserts += 1
+        except Exception:
+            pass
+        try:
+            db.upsert_feed_entry(
+                obj.cve_id,
+                obj.source,
+                products_text=obj.products_text,
+                kev_flag=obj.kev_flag,
+                raw_payload=obj.raw_payload,
+                ingest_id=ingest_id,
+                status="stored",
+                message="MSRC feed entry captured",
+            )
+            feed_upserted += 1
+        except Exception:
+            continue
+    return feed_upserted, skipped
+
+
 def ingest_source(source_name):
     """Fetch, normalise, and persist a given source."""
     inserted = 0
@@ -880,6 +1212,12 @@ def ingest_source(source_name):
                 raw = fetch_cisa_kev()
                 all_objs = normalise_cisa(raw)
                 _set_status(source_name, message=f"Fetched CISA KEV ({len(all_objs)} items)", progress=50)
+                # Fast path: store feed entries and bulk update kev_flag
+                feed_upserted, kev_updated = process_cisa_feed(all_objs, ingest_id=run_id)
+                _set_status(source_name, message=f"CISA applied: stored {feed_upserted}, kev_flag set on {kev_updated}", progress=100)
+                if run_id:
+                    db.finish_ingest_run(run_id, status="completed", inserted=feed_upserted, updated=kev_updated, message="CISA fast path")
+                return feed_upserted, kev_updated, 0
             except Exception as exc:
                 _set_last_error(source_name, str(exc))
                 if run_id:
@@ -919,14 +1257,17 @@ def ingest_source(source_name):
             try:
                 from . import import_msrc
 
-                inserted, updated = import_msrc.import_msrc_threats(ingest_id=run_id)
-                if inserted == 0 and updated == 0:
-                    status_entry = _last_status.get(source_name, {})
-                    if not status_entry.get("error"):
-                        _set_last_error(source_name, "No data ingested (empty feed or duplicates).")
+                raw_count = import_msrc.import_msrc_threats(ingest_id=run_id, return_objects=True)
+                all_objs = raw_count if isinstance(raw_count, list) else []
+                _set_status(source_name, message=f"Fetched MSRC ({len(all_objs)} items)", progress=50)
+                stored, skipped_sec = process_msrc_feed(all_objs, ingest_id=run_id)
+                msg = f"MSRC stored {stored} entries"
+                if skipped_sec:
+                    msg += f"; skipped {skipped_sec} (no base CVE)"
+                _set_status(source_name, message=msg, progress=100)
                 if run_id:
-                    db.finish_ingest_run(run_id, status="completed", inserted=inserted, updated=updated, message=_last_status.get(source_name, {}).get("message"))
-                return inserted, updated, 0
+                    db.finish_ingest_run(run_id, status="completed", inserted=stored, updated=0, message=msg)
+                return stored, 0, skipped_sec
             except Exception as exc:
                 _set_last_error(source_name, str(exc))
                 if run_id:
@@ -937,6 +1278,8 @@ def ingest_source(source_name):
                 cfg = get_nvd_filter_config()
                 days = cfg.get("days") or 10
                 keywords = cfg.get("keywords") or []
+                end_dt = datetime.utcnow()
+                start_dt = end_dt - timedelta(days=days)
                 if run_id:
                     try:
                         db.finish_ingest_run(run_id, status="running", inserted=0, updated=0, message=f"Config snapshot: days={days}, keywords={keywords}")
@@ -946,16 +1289,28 @@ def ingest_source(source_name):
                 vulns = raw.get("vulnerabilities", []) if isinstance(raw, dict) else []
                 if vulns:
                     all_objs.extend(normalise_nvd(raw, keyword=None))
-                # Also fetch by keywords to supplement the date window
+                # Also fetch by keywords within the same date window
                 keyword_total = 0
                 if keywords:
-                    for kw, resp in fetch_nvd_for_keywords(keywords):
+                    for kw, resp in fetch_nvd_for_keywords(keywords, start=start_dt, end=end_dt):
                         all_objs.extend(normalise_nvd(resp, keyword=kw))
                         items = resp.get("vulnerabilities", []) if isinstance(resp, dict) else []
                         keyword_total += len(items)
                 msg = f"Fetched NVD: {len(vulns)} by date (last {days} days)"
                 if keywords:
                     msg += f"; {keyword_total} by keywords ({', '.join(keywords)})"
+                # Filter all_objs by date window to be safe
+                def _within_window(obj):
+                    pub = obj.published_at if isinstance(obj.published_at, datetime) else None
+                    if not pub:
+                        return False
+                    dt = pub
+                    if dt.tzinfo:
+                        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+                    return dt >= start_dt.replace(tzinfo=None)
+                if start_dt and all_objs:
+                    all_objs = [o for o in all_objs if _within_window(o)]
+                    msg += f"; after date filter: {len(all_objs)}"
                 _set_status(source_name, message=msg, progress=50)
             except Exception as exc:
                 _set_last_error(source_name, str(exc))
@@ -1123,6 +1478,125 @@ def enrich_all_cve_sources():
         enrich_nvd_with_cisa_kev()
     except Exception as exc:
         print("Error in enrich_nvd_with_cisa_kev:", exc)
+
+
+def apply_feed_entries_for_cve(cve_id):
+    """Apply stored feed entries for a single CVE to the master threat record."""
+    if not cve_id:
+        return 0
+    master = db.admin_get_threat_by_cve(cve_id) if hasattr(db, "admin_get_threat_by_cve") else None
+    if not master:
+        return 0
+    threat_id = master.get("id")
+    entries = db.get_feed_entries_by_cve(cve_id)
+    applied = 0
+    def _safe_json(val):
+        if not val:
+            return None
+        try:
+            return json.loads(val)
+        except Exception:
+            return None
+    for entry in entries:
+        src = (entry.get("source") or "").upper()
+        if not src:
+            continue
+        try:
+            if src == "CISA-KEV":
+                kev_fields = {}
+                if entry.get("raw_payload"):
+                    try:
+                        kev_raw = json.loads(entry.get("raw_payload"))
+                        kev_fields = {
+                            "kev_date_added": kev_raw.get("dateAdded") or kev_raw.get("date_added"),
+                            "kev_due_date": kev_raw.get("dueDate") or kev_raw.get("due_date"),
+                            "kev_description": kev_raw.get("shortDescription") or kev_raw.get("vulnerabilityName") or kev_raw.get("description"),
+                            "kev_vendor": kev_raw.get("vendorProject") or kev_raw.get("vendor"),
+                            "kev_product": kev_raw.get("product"),
+                            "kev_action_required": bool(kev_raw.get("requiredAction")),
+                            "kev_required_action": kev_raw.get("requiredAction"),
+                            "kev_source_url": kev_raw.get("url") or "https://www.cisa.gov/known-exploited-vulnerabilities-catalog",
+                        }
+                    except Exception:
+                        kev_fields = {}
+                try:
+                    db.upsert_kev_enrichment(
+                        cve_id,
+                        kev_date_added=kev_fields.get("kev_date_added"),
+                        kev_due_date=kev_fields.get("kev_due_date"),
+                        kev_description=kev_fields.get("kev_description"),
+                        kev_vendor=kev_fields.get("kev_vendor"),
+                        kev_product=kev_fields.get("kev_product"),
+                        kev_action_required=kev_fields.get("kev_action_required"),
+                        kev_required_action=kev_fields.get("kev_required_action"),
+                        kev_source_url=kev_fields.get("kev_source_url"),
+                        known_exploited=True,
+                        raw_payload=entry.get("raw_payload"),
+                        ingest_id=entry.get("ingest_id"),
+                    )
+                except Exception:
+                    pass
+                db.update_nvd_threat_for_enrichment(
+                    threat_id,
+                    kev_flag=True,
+                )
+                try:
+                    db.insert_cve_history(
+                        cve_id,
+                        entry.get("source"),
+                        "enrich",
+                        changed_fields="kev_flag",
+                        raw_payload=entry.get("raw_payload"),
+                    )
+                except Exception:
+                    pass
+                applied += 1
+            elif src == "MSRC":
+                # For MSRC we now keep enrichment in feed entries only to avoid overwriting NVD fields.
+                try:
+                    db.insert_cve_history(
+                        cve_id,
+                        entry.get("source"),
+                        "store",
+                        changed_fields="stored msrc payload",
+                        raw_payload=entry.get("raw_payload"),
+                    )
+                except Exception:
+                    pass
+                applied += 1
+            else:
+                # Generic secondary: merge payload and products, mark enriched
+                nvd_row = db.admin_get_threat(threat_id)
+                nvd_payload = _safe_json(nvd_row.get("raw_payload") if nvd_row else None)
+                feed_payload = _safe_json(entry.get("raw_payload"))
+                merged_payload = json.dumps({"nvd": nvd_payload, "feed": feed_payload})
+                base_products = nvd_row.get("products_text") if nvd_row else ""
+                feed_products = entry.get("products_text") or ""
+                combined_products = None
+                if feed_products:
+                    if not base_products:
+                        combined_products = feed_products
+                    elif feed_products not in base_products:
+                        combined_products = base_products + " | " + feed_products
+                db.update_nvd_threat_for_enrichment(
+                    threat_id,
+                    merged_raw_payload=merged_payload,
+                    products_text=combined_products,
+                )
+                try:
+                    db.insert_cve_history(
+                        cve_id,
+                        entry.get("source"),
+                        "enrich",
+                        changed_fields="payload/products",
+                        raw_payload=entry.get("raw_payload"),
+                    )
+                except Exception:
+                    pass
+                applied += 1
+        except Exception:
+            continue
+    return applied
 
 
 # Placeholder functions for completeness (not yet implemented)

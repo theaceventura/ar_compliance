@@ -42,6 +42,9 @@ def ensure_indexes():
         cur.execute("CREATE INDEX IF NOT EXISTS idx_history_created_at ON cve_history(created_at)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_ingest_runs_source ON ingest_runs(source)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_ingest_runs_started ON ingest_runs(started_at)")
+        cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_feed_entry_unique ON threat_feed_entries(cve_id, source)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_feed_entry_source ON threat_feed_entries(source)")
+        cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_kev_cve ON cve_kev_enrichment(cve_id)")
         conn.commit()
         status = "created/exists"
     except Exception as exc:
@@ -227,6 +230,7 @@ def _run_migrations(cur):
         ("threat_objects", "nvd_product_family", "ALTER TABLE threat_objects ADD COLUMN nvd_product_family TEXT"),
         ("threat_objects", "contrib_sources", "ALTER TABLE threat_objects ADD COLUMN contrib_sources TEXT"),
         ("threat_objects", "ingest_id", "ALTER TABLE threat_objects ADD COLUMN ingest_id INTEGER"),
+        ("cve_kev_enrichment", "kev_required_action", "ALTER TABLE cve_kev_enrichment ADD COLUMN kev_required_action TEXT"),
     ]
 
     for item in migrations:
@@ -266,6 +270,74 @@ def _run_migrations(cur):
         )
         """
     )
+    # Feed entries (secondary source payloads) unique by (cve_id, source)
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS threat_feed_entries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cve_id TEXT,
+            source TEXT,
+            products_text TEXT,
+            kev_flag INTEGER DEFAULT 0,
+            raw_payload TEXT,
+            ingest_id INTEGER,
+            fetched_at TEXT,
+            status TEXT,
+            message TEXT,
+            UNIQUE(cve_id, source)
+        )
+        """
+    )
+    # KEV enrichment table (one row per CVE)
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS cve_kev_enrichment (
+            cve_id TEXT PRIMARY KEY,
+            kev_date_added TEXT,
+            kev_due_date TEXT,
+            kev_description TEXT,
+            kev_vendor TEXT,
+            kev_product TEXT,
+            kev_action_required INTEGER DEFAULT 0,
+            kev_required_action TEXT,
+            kev_source_url TEXT,
+            known_exploited INTEGER DEFAULT 1,
+            raw_payload TEXT,
+            fetched_at TEXT,
+            ingest_id INTEGER
+        )
+        """
+    )
+    # MSRC enrichment table (one row per CVE)
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS cve_msrc_enrichment (
+            cve_id TEXT PRIMARY KEY,
+            msrc_release_id TEXT,
+            msrc_release_title TEXT,
+            msrc_initial_release_utc TEXT,
+            msrc_current_release_utc TEXT,
+            msrc_cvrf_url TEXT,
+            msrc_title TEXT,
+            msrc_threat_category TEXT,
+            msrc_customer_action_required INTEGER DEFAULT 0,
+            msrc_publicly_disclosed INTEGER DEFAULT 0,
+            msrc_exploited INTEGER DEFAULT 0,
+            msrc_exploitability_assessment TEXT,
+            msrc_cvss_base_score REAL,
+            msrc_cvss_temporal_score REAL,
+            msrc_cvss_vector TEXT,
+            msrc_affected_products TEXT,
+            msrc_fixed_build TEXT,
+            msrc_remediation_urls TEXT,
+            msrc_summary_text TEXT,
+            last_seen_utc TEXT,
+            ingest_id INTEGER
+        )
+        """
+    )
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_msrc_enrich_cve ON cve_msrc_enrichment(cve_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_msrc_enrich_seen ON cve_msrc_enrichment(last_seen_utc)")
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS ingest_runs (
@@ -911,6 +983,19 @@ def admin_threat_summary(sources):
     conn.close()
     return summary
 
+
+def admin_feed_entry_counts(sources):
+    """Return counts of stored feed entries for given sources."""
+    conn = get_connection()
+    cur = conn.cursor()
+    out = {}
+    for src in sources:
+        cur.execute("SELECT COUNT(*) as cnt FROM threat_feed_entries WHERE source=?", (src,))
+        row = cur.fetchone()
+        out[src] = row["cnt"] if row and "cnt" in row.keys() else 0
+    conn.close()
+    return out
+
 def admin_threat_recent_counts(sources, days=7):
     """Return counts of new and updated threats per source within the last `days`."""
     conn = get_connection()
@@ -1045,6 +1130,135 @@ def rollback_last_ingest(source):
     return deleted, dict(run)
 
 
+# Feed entry helpers
+def upsert_feed_entry(cve_id, source, *, products_text=None, kev_flag=False, raw_payload=None, ingest_id=None, status=None, message=None):
+    if not source or not cve_id:
+        return
+    conn = get_connection()
+    cur = conn.cursor()
+    now = datetime.utcnow().isoformat()
+    cur.execute(
+        """
+        INSERT INTO threat_feed_entries (cve_id, source, products_text, kev_flag, raw_payload, ingest_id, fetched_at, status, message)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(cve_id, source) DO UPDATE SET
+            products_text=excluded.products_text,
+            kev_flag=excluded.kev_flag,
+            raw_payload=excluded.raw_payload,
+            ingest_id=excluded.ingest_id,
+            fetched_at=excluded.fetched_at,
+            status=excluded.status,
+            message=excluded.message
+        """,
+        (
+            cve_id,
+            source,
+            products_text,
+            1 if kev_flag else 0,
+            raw_payload,
+            ingest_id,
+            now,
+            status,
+            message,
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_feed_entries_by_cve(cve_id):
+    """Return all feed entries for a given CVE."""
+    if not cve_id:
+        return []
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT * FROM threat_feed_entries
+        WHERE cve_id=?
+        ORDER BY datetime(fetched_at) DESC
+        """,
+        (cve_id,),
+    )
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+def upsert_kev_enrichment(
+    cve_id,
+    *,
+    kev_date_added=None,
+    kev_due_date=None,
+    kev_description=None,
+    kev_vendor=None,
+    kev_product=None,
+    kev_action_required=False,
+    kev_required_action=None,
+    kev_source_url=None,
+    known_exploited=True,
+    raw_payload=None,
+    ingest_id=None,
+):
+    """Upsert KEV enrichment data for a CVE."""
+    if not cve_id:
+        return
+    conn = get_connection()
+    cur = conn.cursor()
+    now = datetime.utcnow().isoformat()
+    cur.execute(
+        """
+        INSERT INTO cve_kev_enrichment (
+            cve_id, kev_date_added, kev_due_date, kev_description, kev_vendor, kev_product,
+            kev_action_required, kev_required_action, kev_source_url, known_exploited, raw_payload, fetched_at, ingest_id
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(cve_id) DO UPDATE SET
+            kev_date_added=excluded.kev_date_added,
+            kev_due_date=excluded.kev_due_date,
+            kev_description=excluded.kev_description,
+            kev_vendor=excluded.kev_vendor,
+            kev_product=excluded.kev_product,
+            kev_action_required=excluded.kev_action_required,
+            kev_required_action=excluded.kev_required_action,
+            kev_source_url=excluded.kev_source_url,
+            known_exploited=excluded.known_exploited,
+            raw_payload=excluded.raw_payload,
+            fetched_at=excluded.fetched_at,
+            ingest_id=excluded.ingest_id
+        """,
+        (
+            cve_id,
+            kev_date_added,
+            kev_due_date,
+            kev_description,
+            kev_vendor,
+            kev_product,
+            1 if kev_action_required else 0,
+            kev_required_action,
+            kev_source_url,
+            1 if known_exploited else 0,
+            raw_payload,
+            now,
+            ingest_id,
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_kev_enrichment(cve_id):
+    """Return KEV enrichment for a CVE."""
+    if not cve_id:
+        return None
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM cve_kev_enrichment WHERE cve_id=?", (cve_id,))
+    row = cur.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
 # Ingest run helpers
 def start_ingest_run(source, status="running", message=None, config_snapshot=None):
     conn = get_connection()
@@ -1090,6 +1304,26 @@ def admin_get_threat(threat_id):
     return dict(row) if row else None
 
 
+def admin_get_threat_by_cve(cve_id):
+    """Return a single threat_object by CVE (prefers NVD)."""
+    if not cve_id:
+        return None
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT * FROM threat_objects
+        WHERE UPPER(cve_id)=?
+        ORDER BY CASE source WHEN 'NVD' THEN 0 ELSE 1 END, datetime(COALESCE(updated_at, created_at)) DESC
+        LIMIT 1
+        """,
+        ((cve_id or "").upper(),),
+    )
+    row = cur.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
 def admin_delete_threats_by_source(source):
     """Delete all threat_objects for a given source (for testing). Returns count deleted."""
     if not source:
@@ -1103,6 +1337,173 @@ def admin_delete_threats_by_source(source):
     conn.commit()
     conn.close()
     return count
+
+
+def admin_delete_feed_entries_by_source(source):
+    """Delete stored feed entries for a given source. Returns count deleted."""
+    if not source:
+        return 0
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) AS cnt FROM threat_feed_entries WHERE source=?", (source,))
+    row = cur.fetchone()
+    count = row["cnt"] if row else 0
+    cur.execute("DELETE FROM threat_feed_entries WHERE source=?", (source,))
+    conn.commit()
+    conn.close()
+    return count
+
+
+def admin_delete_kev_enrichment():
+    """Delete all KEV enrichment rows."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) AS cnt FROM cve_kev_enrichment")
+    row = cur.fetchone()
+    count = row["cnt"] if row else 0
+    cur.execute("DELETE FROM cve_kev_enrichment")
+    conn.commit()
+    conn.close()
+    return count
+
+def count_nvd_with_feed(feed_source):
+    """Count NVD CVEs that have a corresponding feed entry for the given source."""
+    if not feed_source:
+        return 0
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT COUNT(*) as cnt
+        FROM threat_objects t
+        WHERE t.source='NVD'
+        AND EXISTS (
+            SELECT 1 FROM threat_feed_entries f
+            WHERE f.source=? AND UPPER(f.cve_id)=UPPER(t.cve_id)
+        )
+        """,
+        (feed_source,),
+    )
+    row = cur.fetchone()
+    conn.close()
+    return row["cnt"] if row else 0
+
+
+def upsert_msrc_enrichment(
+    cve_id,
+    *,
+    msrc_release_id=None,
+    msrc_release_title=None,
+    msrc_initial_release_utc=None,
+    msrc_current_release_utc=None,
+    msrc_cvrf_url=None,
+    msrc_title=None,
+    msrc_threat_category=None,
+    msrc_customer_action_required=False,
+    msrc_publicly_disclosed=False,
+    msrc_exploited=False,
+    msrc_exploitability_assessment=None,
+    msrc_cvss_base_score=None,
+    msrc_cvss_temporal_score=None,
+    msrc_cvss_vector=None,
+    msrc_affected_products=None,
+    msrc_fixed_build=None,
+    msrc_remediation_urls=None,
+    msrc_summary_text=None,
+    last_seen_utc=None,
+    ingest_id=None,
+):
+    """Upsert MSRC enrichment data for a CVE."""
+    if not cve_id:
+        return
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO cve_msrc_enrichment (
+            cve_id,
+            msrc_release_id,
+            msrc_release_title,
+            msrc_initial_release_utc,
+            msrc_current_release_utc,
+            msrc_cvrf_url,
+            msrc_title,
+            msrc_threat_category,
+            msrc_customer_action_required,
+            msrc_publicly_disclosed,
+            msrc_exploited,
+            msrc_exploitability_assessment,
+            msrc_cvss_base_score,
+            msrc_cvss_temporal_score,
+            msrc_cvss_vector,
+            msrc_affected_products,
+            msrc_fixed_build,
+            msrc_remediation_urls,
+            msrc_summary_text,
+            last_seen_utc,
+            ingest_id
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(cve_id) DO UPDATE SET
+            msrc_release_id=excluded.msrc_release_id,
+            msrc_release_title=excluded.msrc_release_title,
+            msrc_initial_release_utc=excluded.msrc_initial_release_utc,
+            msrc_current_release_utc=excluded.msrc_current_release_utc,
+            msrc_cvrf_url=excluded.msrc_cvrf_url,
+            msrc_title=excluded.msrc_title,
+            msrc_threat_category=excluded.msrc_threat_category,
+            msrc_customer_action_required=excluded.msrc_customer_action_required,
+            msrc_publicly_disclosed=excluded.msrc_publicly_disclosed,
+            msrc_exploited=excluded.msrc_exploited,
+            msrc_exploitability_assessment=excluded.msrc_exploitability_assessment,
+            msrc_cvss_base_score=excluded.msrc_cvss_base_score,
+            msrc_cvss_temporal_score=excluded.msrc_cvss_temporal_score,
+            msrc_cvss_vector=excluded.msrc_cvss_vector,
+            msrc_affected_products=excluded.msrc_affected_products,
+            msrc_fixed_build=excluded.msrc_fixed_build,
+            msrc_remediation_urls=excluded.msrc_remediation_urls,
+            msrc_summary_text=excluded.msrc_summary_text,
+            last_seen_utc=excluded.last_seen_utc,
+            ingest_id=excluded.ingest_id
+        """,
+        (
+            cve_id,
+            msrc_release_id,
+            msrc_release_title,
+            msrc_initial_release_utc,
+            msrc_current_release_utc,
+            msrc_cvrf_url,
+            msrc_title,
+            msrc_threat_category,
+            1 if msrc_customer_action_required else 0,
+            1 if msrc_publicly_disclosed else 0,
+            1 if msrc_exploited else 0,
+            msrc_exploitability_assessment,
+            msrc_cvss_base_score,
+            msrc_cvss_temporal_score,
+            msrc_cvss_vector,
+            msrc_affected_products,
+            msrc_fixed_build,
+            msrc_remediation_urls,
+            msrc_summary_text,
+            last_seen_utc,
+            ingest_id,
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_msrc_enrichment(cve_id):
+    """Return MSRC enrichment for a CVE."""
+    if not cve_id:
+        return None
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM cve_msrc_enrichment WHERE cve_id=?", (cve_id,))
+    row = cur.fetchone()
+    conn.close()
+    return dict(row) if row else None
 
 
 # Enrichment helpers

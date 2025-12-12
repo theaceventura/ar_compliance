@@ -11,13 +11,14 @@
 
     <div class="space-y-4">
         {% set primary_feeds = [('acsc','ACSC'),('nvd','NVD')] %}
-        {% set secondary_feeds = [('cisa','CISA-KEV'),('msrc','MSRC'),('apple','APPLE')] %}
+        {% set secondary_feeds = [('cisa','CISA-KEV'),('msrc','MSRC')] %}
         <div>
             <div class="text-sm font-semibold text-slate-800 mb-2">Primary Feeds</div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         {% for key,label in primary_feeds %}
         {% set stat = stats.get(label, {}) %}
-        {% set ok = stat.count and stat.count > 0 %}
+        {% set feed_count = (feed_entry_counts.get(label) if feed_entry_counts else 0) or 0 %}
+        {% set ok = (stat.count and stat.count > 0) or feed_count > 0 %}
         {% set status_entry = last_errors.get(key) or {} %}
         {% set err = status_entry.get('error') %}
         {% set status_text = 'OK' if ok else (err or 'Never fetched / no data yet') %}
@@ -30,10 +31,18 @@
             {% if p > 100 %}{% set p = 100 %}{% endif %}
         {% endif %}
         {% set msg = status_entry.get('message') %}
-        {% set last_run_val = stat.last_activity_fmt or stat.last_activity or stat.last_created_fmt or stat.last_created or '—' %}
-        {% set last_run_date = last_run_val.split(' ')[0] if last_run_val else '—' %}
+        {% set feed_count = (feed_entry_counts.get(label) if feed_entry_counts else 0) or 0 %}
+        {% set last_run_val = stat.last_activity_fmt or stat.last_activity or stat.last_created_fmt or stat.last_created or '' %}
+        {% set last_run_date = last_run_val.split(' ')[0] if last_run_val else (last_checked or '—') %}
         {% set tile_bg = 'bg-green-50 border-green-200' if ok else ('bg-red-50 border-red-200' if err else 'bg-amber-50 border-amber-200') %}
-        <div class="border rounded p-4 flex flex-col gap-3 {{ tile_bg }} feed-tile cursor-pointer" data-feed="{{ key }}">
+        <div class="border rounded p-4 flex flex-col gap-3 {{ tile_bg }} feed-tile cursor-pointer"
+             data-feed="{{ key }}"
+             data-last-check="{{ last_checked or '—' }}"
+             data-last-run="{{ last_run_date }}"
+             data-total="{{ stat.count or feed_count or 0 }}"
+             data-status="{{ msg or '—' }}"
+             data-error="{{ err or '' }}"
+             data-reason="{% if not err and not ok %}Never fetched / no data ingested yet.{% endif %}">
             <div class="flex items-start justify-between gap-3">
                 <div>
                     <div class="text-sm font-semibold text-slate-800">
@@ -44,7 +53,7 @@
                             Australian Cyber Security Centre (ACSC)
                             <div class="text-xs text-slate-600">Published by ACSC</div>
                         {% elif key == 'cisa' %}
-                            CISA Known Exploited Vulnerabilities
+                            CISA Known Exploited Vulnerabilities (CISA)
                             <div class="text-xs text-slate-600">Published by CISA</div>
                         {% elif key == 'msrc' %}
                             Microsoft Security Response Center (MSRC)
@@ -53,18 +62,18 @@
                             {{ feed_labels.get(key, label) }}
                         {% endif %}
                     </div>
-                    <div class="text-xs text-slate-600 flex flex-wrap gap-3">
+                    <div class="text-xs text-slate-600 flex flex-wrap gap-3 hidden info-inline">
                         <span>Last check: {{ last_checked or '—' }}</span>
                         <span>Last run: {{ last_run_date }}</span>
                     </div>
                     {% if key == 'nvd' and nvd_config %}
                     <div class="text-xs text-slate-600">Filters: last {{ nvd_config.days }} days; fallback keywords: {{ nvd_config.keywords|join(', ') }}.</div>
                     {% endif %}
-                    <div class="text-xs text-slate-600">Total ingested: {{ stat.count or 0 }}</div>
-                    <div class="text-xs text-slate-700" data-status-text="{{ key }}">Status: {{ msg or '—' }}</div>
-                    <div class="text-xs text-red-700 font-semibold {% if not err %}hidden{% endif %}" data-status-error="{{ key }}">Last error: {{ err }}</div>
+                    <div class="text-xs text-slate-600 hidden info-inline">Total ingested: {{ stat.count or 0 }}</div>
+                    <div class="text-xs text-slate-700 hidden info-inline" data-status-text="{{ key }}">Status: {{ msg or '—' }}</div>
+                    <div class="text-xs text-red-700 font-semibold hidden info-inline" data-status-error="{{ key }}">Last error: {{ err }}</div>
                     {% if not err and not ok %}
-                    <div class="text-xs text-amber-700 font-semibold">Reason: Never fetched / no data ingested yet.</div>
+                    <div class="text-xs text-amber-700 font-semibold hidden info-inline">Reason: Never fetched / no data ingested yet.</div>
                     {% endif %}
                     <div class="mt-2 {% if progress is none %}hidden{% endif %}" data-progress-container="{{ key }}">
                         <div class="h-2 bg-slate-200 rounded-full overflow-hidden">
@@ -83,7 +92,8 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         {% for key,label in secondary_feeds %}
         {% set stat = stats.get(label, {}) %}
-        {% set ok = stat.count and stat.count > 0 %}
+        {% set feed_count = (feed_entry_counts.get(label) if feed_entry_counts else 0) or 0 %}
+        {% set ok = (stat.count and stat.count > 0) or feed_count > 0 %}
         {% set status_entry = last_errors.get(key) or {} %}
         {% set err = status_entry.get('error') %}
         {% set status_text = 'OK' if ok else (err or 'Never fetched / no data yet') %}
@@ -96,10 +106,17 @@
             {% if p > 100 %}{% set p = 100 %}{% endif %}
         {% endif %}
         {% set msg = status_entry.get('message') %}
-        {% set last_run_val = stat.last_activity_fmt or stat.last_activity or stat.last_created_fmt or stat.last_created or '—' %}
-        {% set last_run_date = last_run_val.split(' ')[0] if last_run_val else '—' %}
+        {% set last_run_val = stat.last_activity_fmt or stat.last_activity or stat.last_created_fmt or stat.last_created or '' %}
+        {% set last_run_date = last_run_val.split(' ')[0] if last_run_val else (last_checked or '—') %}
         {% set tile_bg = 'bg-green-50 border-green-200' if ok else ('bg-red-50 border-red-200' if err else 'bg-amber-50 border-amber-200') %}
-        <div class="border rounded p-4 flex flex-col gap-3 {{ tile_bg }} feed-tile cursor-pointer" data-feed="{{ key }}">
+        <div class="border rounded p-4 flex flex-col gap-3 {{ tile_bg }} feed-tile cursor-pointer"
+             data-feed="{{ key }}"
+             data-last-check="{{ last_checked or '—' }}"
+             data-last-run="{{ last_run_date }}"
+             data-total="{{ stat.count or feed_count or 0 }}"
+             data-status="{{ msg or '—' }}"
+             data-error="{{ err or '' }}"
+             data-reason="{% if not err and not ok %}Never fetched / no data ingested yet.{% endif %}">
             <div class="flex items-start justify-between gap-3">
                 <div>
                     <div class="text-sm font-semibold text-slate-800">
@@ -110,7 +127,7 @@
                             Australian Cyber Security Centre (ACSC)
                             <div class="text-xs text-slate-600">Published by ACSC</div>
                         {% elif key == 'cisa' %}
-                            CISA Known Exploited Vulnerabilities
+                            CISA Known Exploited Vulnerabilities (CISA)
                             <div class="text-xs text-slate-600">Published by CISA</div>
                         {% elif key == 'msrc' %}
                             Microsoft Security Response Center (MSRC)
@@ -119,15 +136,15 @@
                             {{ feed_labels.get(key, label) }}
                         {% endif %}
                     </div>
-                    <div class="text-xs text-slate-600 flex flex-wrap gap-3">
+                    <div class="text-xs text-slate-600 flex flex-wrap gap-3 hidden info-inline">
                         <span>Last check: {{ last_checked or '—' }}</span>
                         <span>Last run: {{ last_run_date }}</span>
                     </div>
-                    <div class="text-xs text-slate-600">Total ingested: {{ stat.count or 0 }}</div>
-                    <div class="text-xs text-slate-700" data-status-text="{{ key }}">Status: {{ msg or '—' }}</div>
-                    <div class="text-xs text-red-700 font-semibold {% if not err %}hidden{% endif %}" data-status-error="{{ key }}">Last error: {{ err }}</div>
+                    <div class="text-xs text-slate-600 hidden info-inline">Total ingested: {{ stat.count or 0 }}</div>
+                    <div class="text-xs text-slate-700 hidden info-inline" data-status-text="{{ key }}">Status: {{ msg or '—' }}</div>
+                    <div class="text-xs text-red-700 font-semibold hidden info-inline" data-status-error="{{ key }}">Last error: {{ err }}</div>
                     {% if not err and not ok %}
-                    <div class="text-xs text-amber-700 font-semibold">Reason: Never fetched / no data ingested yet.</div>
+                    <div class="text-xs text-amber-700 font-semibold hidden info-inline">Reason: Never fetched / no data ingested yet.</div>
                     {% endif %}
                     <div class="mt-2 {% if progress is none %}hidden{% endif %}" data-progress-container="{{ key }}">
                         <div class="h-2 bg-slate-200 rounded-full overflow-hidden">
@@ -145,6 +162,16 @@
 
     <div class="bg-slate-50 border border-slate-100 rounded p-3 text-sm space-y-3">
         <div class="text-sm font-semibold text-slate-800" id="selectedFeedLabel">Select a feed tile above</div>
+        <div id="selectedFeedDetails" class="text-xs text-slate-600 hidden">
+            <div class="flex flex-wrap items-center gap-4">
+                <span>Last check: <span id="sf-last-check">—</span></span>
+                <span>Last run: <span id="sf-last-run">—</span></span>
+                <span>Total ingested: <span id="sf-total">—</span></span>
+                <span>Status: <span id="sf-status">—</span></span>
+            </div>
+            <div class="text-red-700 mt-1" id="sf-error" style="display:none;">Last error: <span id="sf-error-text"></span></div>
+            <div class="text-amber-700 mt-1" id="sf-reason" style="display:none;">Reason: <span id="sf-reason-text"></span></div>
+        </div>
         <form method="POST" class="flex flex-col gap-2">
             <input type="hidden" name="source" id="selectedFeedInput">
             <div class="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-end">
@@ -158,7 +185,11 @@
                 <div class="flex flex-col sm:flex-row gap-2 sm:items-end">
                     <div class="flex flex-col">
                         <label class="text-xs text-slate-600">Days window</label>
-                        <input type="number" name="nvd_days" min="1" class="border rounded px-2 py-1 text-sm" value="{{ nvd_config.days if nvd_config else 10 }}">
+                        <select name="nvd_days" class="border rounded px-2 py-1 text-sm">
+                            {% for val,label in [(7,'7 Days'),(30,'30 Days'),(90,'90 Days'),(180,'180 Days'),(180,'6 Months'),(365,'12 Months')] %}
+                                <option value="{{ val }}" {% if nvd_config and nvd_config.days == val %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
                     <div class="flex flex-col flex-1">
                         <label class="text-xs text-slate-600">Fallback keywords (comma separated)</label>
@@ -174,11 +205,13 @@
 
         <div class="bg-slate-50 border border-slate-100 rounded p-3 text-sm overflow-x-auto relative" data-widget-id="admin-threats-summary">
             <div class="text-sm font-semibold text-slate-800 mb-2">Ingestion Summary</div>
-        <div class="tbl-header text-sm grid grid-cols-[1.5fr,0.6fr,0.55fr,0.55fr,0.75fr,0.45fr,0.45fr,0.45fr,0.45fr] gap-0.5 font-semibold text-slate-700 min-w-[760px] items-center">
+        <div class="tbl-header text-sm grid grid-cols-[1.3fr,0.55fr,0.45fr,0.45fr,0.55fr,0.55fr,0.55fr,0.4fr,0.4fr,0.4fr,0.4fr] gap-1.5 font-semibold text-slate-700 min-w-[780px] items-center">
             <div class="text-left pl-1">Feed</div>
             <div class="text-center">Type</div>
             <div class="text-center">New</div>
             <div class="text-center">Updated</div>
+            <div class="text-center whitespace-nowrap">CISA</div>
+            <div class="text-center whitespace-nowrap">MSRC</div>
             <div class="text-center">Last</div>
             <div class="text-center">Today</div>
             <div class="text-center">Week</div>
@@ -188,11 +221,12 @@
         <div class="mt-2 space-y-1">
             {% for key,label in [('acsc','ACSC'),('nvd','NVD'),('cisa','CISA-KEV'),('msrc','MSRC'),('apple','APPLE')] %}
             {% set stat = stats.get(label, {}) %}
-            {% if stat.count %}
-            {% set last_run_val = stat.last_activity_fmt or stat.last_activity or stat.last_created_fmt or stat.last_created or '—' %}
-                {% set last_run = last_run_val.split(' ')[0] if last_run_val else '—' %}
+            {% set feed_count = (feed_entry_counts.get(label) if feed_entry_counts else 0) or 0 %}
+            {% if stat.count or feed_count %}
+            {% set last_run_val = stat.last_activity_fmt or stat.last_activity or stat.last_created_fmt or stat.last_created or '' %}
+                {% set last_run = last_run_val.split(' ')[0] if last_run_val else (last_errors.get(key, {}).get('checked_at') or '—') %}
                 {% set status_entry = last_errors.get(key) or {} %}
-                {% set has_data = stat.count and stat.count > 0 %}
+                {% set has_data = (stat.count and stat.count > 0) or feed_count > 0 %}
                 {% set err = status_entry.get('error') %}
                 {% set row_class = 'bg-white' %}
                 {% if err %}
@@ -201,8 +235,9 @@
                     {% set row_class = 'bg-green-50' %}
                 {% endif %}
                 {% set rec = recent_counts.get(label, {}) if recent_counts else {} %}
-                <div class="tbl-row text-sm grid grid-cols-[1.5fr,0.6fr,0.55fr,0.55fr,0.75fr,0.45fr,0.45fr,0.45fr,0.45fr] gap-0.5 items-center text-slate-700 min-w-[760px] border border-slate-100 rounded px-2 py-2 {% if loop.index0 % 2 == 1 %}tbl-row-alt{% endif %} {{ row_class }}">
-                    <div class="text-left pl-1 font-medium">{{ feed_labels.get(key, label) }}</div>
+                {% set display_total = stat.count or feed_count or 0 %}
+                <div class="tbl-row text-sm grid grid-cols-[1.3fr,0.55fr,0.45fr,0.45fr,0.55fr,0.55fr,0.55fr,0.4fr,0.4fr,0.4fr,0.4fr] gap-1.5 items-center text-slate-700 min-w-[780px] border border-slate-100 rounded px-2 py-2 {% if loop.index0 % 2 == 1 %}tbl-row-alt{% endif %} {{ row_class }}">
+                    <div class="font-medium text-left pl-1">{{ feed_labels.get(key, label) }}</div>
                     <div class="text-center">
                         {% set role = feed_roles.get(key) if feed_roles else None %}
                         {% if role %}
@@ -211,13 +246,31 @@
                             —
                         {% endif %}
                     </div>
-                    <div class="text-center">{{ rec.new or 0 }}</div>
-                    <div class="text-center">{{ rec.updated or 0 }}</div>
-                    <div class="whitespace-nowrap text-center">{{ last_run }}</div>
-                    <div class="text-center">{{ stat.today or 0 }}</div>
-                    <div class="text-center">{{ (stat.week or 0) }}</div>
-                    <div class="text-center">{{ (stat.month or 0) }}</div>
-                    <div class="text-center">{{ stat.count or 0 }}</div>
+                    <div>{{ rec.new or feed_count or 0 }}</div>
+                    <div>{{ rec.updated or feed_count or 0 }}</div>
+                    <div>
+                        {% if key == 'nvd' %}
+                            {{ nvd_cisa_overlap or 0 }}
+                        {% elif key == 'cisa' %}
+                            {{ rec.updated or feed_count or 0 }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </div>
+                    <div>
+                        {% if key == 'nvd' %}
+                            {{ nvd_msrc_overlap or 0 }}
+                        {% elif key == 'msrc' %}
+                            {{ rec.updated or feed_count or 0 }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </div>
+                    <div class="whitespace-nowrap">{{ last_run }}</div>
+                    <div>{{ stat.today or 0 }}</div>
+                    <div>{{ (stat.week or 0) }}</div>
+                    <div>{{ (stat.month or 0) }}</div>
+                    <div>{{ display_total }}</div>
                 </div>
             {% endif %}
             {% endfor %}
@@ -225,45 +278,47 @@
     </div>
 
     {% if source %}
-    <div class="bg-slate-50 border border-slate-100 rounded p-3 text-sm space-y-2">
-        <div class="text-sm font-semibold text-slate-800">Ingest History ({{ (source or '').upper() }})</div>
+    <details class="bg-slate-50 border border-slate-100 rounded p-3 text-sm space-y-2" {% if source and source|lower == 'msrc' %}{% else %}open{% endif %}>
+        <summary class="text-sm font-semibold text-slate-800 cursor-pointer">Ingest History ({{ (source or '').upper() }})</summary>
         {% if ingest_history %}
-        <div class="tbl-header text-sm grid grid-cols-[0.9fr,0.9fr,0.6fr,0.6fr,0.7fr,2.5fr] gap-1 items-center min-w-[740px]">
-            <div class="text-center">Started</div>
-            <div class="text-center">Finished</div>
-            <div class="text-center">Inserted</div>
-            <div class="text-center">Updated</div>
-            <div class="text-center">Status</div>
-            <div class="text-center">Message / Config</div>
-        </div>
-        <div class="space-y-1">
-        {% for run in ingest_history %}
-            <div class="tbl-row text-sm grid grid-cols-[0.9fr,0.9fr,0.6fr,0.6fr,0.7fr,2.5fr] gap-1 items-center min-w-[740px] border border-slate-100 rounded px-2 py-2 {% if loop.index0 % 2 == 1 %}tbl-row-alt{% endif %}">
-                <div class="text-slate-700 whitespace-nowrap flex flex-col leading-tight text-center">
-                    <span>{{ run.started_date or run.started_at or '—' }}</span>
-                    <span class="text-[11px] text-slate-500">{{ run.started_time or '' }}</span>
-                </div>
-                <div class="text-slate-700 whitespace-nowrap flex flex-col leading-tight text-center">
-                    <span>{{ run.finished_date or run.finished_at or '—' }}</span>
-                    <span class="text-[11px] text-slate-500">{{ run.finished_time or '' }}</span>
-                </div>
-                <div class="text-center text-slate-700">{{ run.inserted or 0 }}</div>
-                <div class="text-center text-slate-700">{{ run.updated or 0 }}</div>
-                <div class="text-center">
-                    <span class="text-[11px] px-1.5 py-0.5 rounded-full {% if run.status=='completed' %}bg-emerald-50 text-emerald-800 border border-emerald-200{% elif run.status=='failed' %}bg-red-50 text-red-800 border border-red-200{% elif run.status=='rolled_back' %}bg-amber-50 text-amber-800 border border-amber-200{% else %}bg-slate-50 text-slate-700 border border-slate-200{% endif %}">
-                        {{ run.status or '—' }}
-                    </span>
-                </div>
-                <div class="text-slate-700 text-sm">
-                    {{ run.message or '—' }}
-                </div>
+        <div class="overflow-auto max-h-64 mt-2">
+            <div class="tbl-header text-sm grid grid-cols-[0.9fr,0.9fr,0.6fr,0.6fr,0.7fr,2.5fr] gap-1 items-center min-w-[740px]">
+                <div class="text-center">Started</div>
+                <div class="text-center">Finished</div>
+                <div class="text-center">Inserted</div>
+                <div class="text-center">Updated</div>
+                <div class="text-center">Status</div>
+                <div class="text-center">Message / Config</div>
             </div>
-        {% endfor %}
+            <div class="space-y-1">
+            {% for run in ingest_history %}
+                <div class="tbl-row text-sm grid grid-cols-[0.9fr,0.9fr,0.6fr,0.6fr,0.7fr,2.5fr] gap-1 items-center min-w-[740px] border border-slate-100 rounded px-2 py-2 {% if loop.index0 % 2 == 1 %}tbl-row-alt{% endif %}">
+                    <div class="text-slate-700 whitespace-nowrap flex flex-col leading-tight text-center">
+                        <span>{{ run.started_date or run.started_at or '—' }}</span>
+                        <span class="text-[11px] text-slate-500">{{ run.started_time or '' }}</span>
+                    </div>
+                    <div class="text-slate-700 whitespace-nowrap flex flex-col leading-tight text-center">
+                        <span>{{ run.finished_date or run.finished_at or '—' }}</span>
+                        <span class="text-[11px] text-slate-500">{{ run.finished_time or '' }}</span>
+                    </div>
+                    <div class="text-center text-slate-700">{{ run.inserted or 0 }}</div>
+                    <div class="text-center text-slate-700">{{ run.updated or 0 }}</div>
+                    <div class="text-center">
+                        <span class="text-[11px] px-1.5 py-0.5 rounded-full {% if run.status=='completed' %}bg-emerald-50 text-emerald-800 border border-emerald-200{% elif run.status=='failed' %}bg-red-50 text-red-800 border border-red-200{% elif run.status=='rolled_back' %}bg-amber-50 text-amber-800 border border-amber-200{% else %}bg-slate-50 text-slate-700 border border-slate-200{% endif %}">
+                            {{ run.status or '—' }}
+                        </span>
+                    </div>
+                    <div class="text-slate-700 text-sm">
+                        {{ run.message or '—' }}
+                    </div>
+                </div>
+            {% endfor %}
+            </div>
         </div>
         {% else %}
         <div class="text-xs text-slate-600">No ingest history yet for {{ (source or '').upper() }}.</div>
         {% endif %}
-    </div>
+    </details>
     {% endif %}
 
     <div class="bg-slate-50 border border-slate-100 rounded p-3 text-sm space-y-3" data-widget-id="admin-threats-list">
@@ -272,16 +327,7 @@
                 <div class="text-sm font-semibold text-slate-800">Threat Listing</div>
             </div>
             <form method="GET" class="flex flex-col gap-2">
-                <div class="flex flex-col sm:flex-row sm:items-center gap-2">
-                    <div class="flex items-center gap-2">
-                        <label class="text-sm text-slate-700">Source</label>
-                        <select name="source" class="border rounded px-2 py-1 text-sm">
-                            <option value="">All sources</option>
-                            {% for key,label in feed_labels.items() %}
-                                <option value="{{ key }}" {% if source==key %}selected{% endif %}>{{ label }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
+                <div class="flex flex-col lg:flex-row lg:items-center gap-2">
                     <div class="flex items-center gap-2">
                         <label class="text-sm text-slate-700">Severity</label>
                         <select name="severity" class="border rounded px-2 py-1 text-sm">
@@ -309,8 +355,6 @@
                             <option value="month" {% if date_range=='month' %}selected{% endif %}>This month</option>
                         </select>
                     </div>
-                </div>
-                <div class="flex flex-col sm:flex-row sm:items-center gap-2">
                     <div class="flex items-center gap-2 flex-1">
                         <label class="text-sm text-slate-700">Search</label>
                         <input type="text" name="q" value="{{ q }}" class="border rounded px-2 py-1 text-sm w-full" placeholder="title, summary, CVE">
@@ -415,6 +459,15 @@ const input = document.getElementById('selectedFeedInput');
 const label = document.getElementById('selectedFeedLabel');
 const buttons = [document.getElementById('btnCheck'), document.getElementById('btnFetch'), document.getElementById('btnStop'), document.getElementById('btnDelete'), document.getElementById('btnRollback')];
 const nvdFields = document.getElementById('nvdFiltersFields');
+const detailBox = document.getElementById('selectedFeedDetails');
+const detailLastCheck = document.getElementById('sf-last-check');
+const detailLastRun = document.getElementById('sf-last-run');
+const detailTotal = document.getElementById('sf-total');
+const detailStatus = document.getElementById('sf-status');
+const detailErrWrap = document.getElementById('sf-error');
+const detailErrText = document.getElementById('sf-error-text');
+const detailReasonWrap = document.getElementById('sf-reason');
+const detailReasonText = document.getElementById('sf-reason-text');
 let selected = null;
     function clearSelection() {
         tiles.forEach(t => t.classList.remove('ring-2','ring-blue-500'));
@@ -427,6 +480,33 @@ let selected = null;
             if (input) input.value = selected;
             if (label) label.textContent = `Selected: ${tile.querySelector('.text-sm.font-semibold')?.textContent?.trim() || selected}`;
             buttons.forEach(b => { if (b) b.disabled = false; });
+            if (detailBox) {
+                detailBox.classList.remove('hidden');
+                if (detailLastCheck) detailLastCheck.textContent = tile.dataset.lastCheck || '—';
+                if (detailLastRun) detailLastRun.textContent = tile.dataset.lastRun || '—';
+                if (detailTotal) detailTotal.textContent = tile.dataset.total || '0';
+                if (detailStatus) detailStatus.textContent = tile.dataset.status || '—';
+                const err = tile.dataset.error || '';
+                if (detailErrWrap && detailErrText) {
+                    if (err) {
+                        detailErrText.textContent = err;
+                        detailErrWrap.style.display = '';
+                    } else {
+                        detailErrWrap.style.display = 'none';
+                        detailErrText.textContent = '';
+                    }
+                }
+                const reason = tile.dataset.reason || '';
+                if (detailReasonWrap && detailReasonText) {
+                    if (reason) {
+                        detailReasonText.textContent = reason;
+                        detailReasonWrap.style.display = '';
+                    } else {
+                        detailReasonWrap.style.display = 'none';
+                        detailReasonText.textContent = '';
+                    }
+                }
+            }
             if (nvdFields) {
                 if (selected === 'nvd') {
                     nvdFields.classList.remove('hidden');

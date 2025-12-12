@@ -386,7 +386,7 @@ def _fetch_cvrf(session: requests.Session, url: str) -> Optional[Dict]:
         return None
 
 
-def import_msrc_threats(ingest_id=None) -> tuple[int, int]:
+def import_msrc_threats(ingest_id=None, return_objects=False):
     """Main entry point for scheduled/CLI ingestion."""
     # Lazy import to avoid circular import at module load
     from . import threat_ingestion
@@ -451,6 +451,9 @@ def import_msrc_threats(ingest_id=None) -> tuple[int, int]:
             continue
         ingest_log.append({"release_id": release_id, "status": "ok", "vulns": len(threats)})
         all_threats.extend(threats)
+    if return_objects:
+        threat_ingestion._set_status("msrc", message=f"MSRC parsed {len(all_threats)} threats", progress=50)
+        return all_threats
     inserted, updated, _ = threat_ingestion.save_threat_objects(all_threats, source_name="msrc", ingest_id=ingest_id)
     ok = sum(1 for e in ingest_log if e.get("status") == "ok")
     errs = [e for e in ingest_log if e.get("status") != "ok"]

@@ -28,11 +28,14 @@
 
     {% set base_tile_class = 'border rounded p-3 bg-white text-slate-900 border-slate-200' %}
     {% set high_tile_class = 'border rounded p-3 bg-red-50 border-red-200 text-red-900' %}
+    {% set medium_tile_class = 'border rounded p-3 bg-amber-50 border-amber-200 text-amber-900' %}
     {% set low_tile_class = 'border rounded p-3 bg-emerald-50 border-emerald-200 text-emerald-900' %}
     {% set sev_val = (threat.severity or '')|lower %}
     {% set severity_tile_class = base_tile_class %}
     {% if 'high' in sev_val or 'critical' in sev_val %}
         {% set severity_tile_class = high_tile_class %}
+    {% elif 'medium' in sev_val %}
+        {% set severity_tile_class = medium_tile_class %}
     {% elif 'low' in sev_val %}
         {% set severity_tile_class = low_tile_class %}
     {% endif %}
@@ -56,16 +59,16 @@
         'i': {'N': 'None', 'L': 'Low', 'H': 'High'},
         'a': {'N': 'None', 'L': 'Low', 'H': 'High'},
     } %}
-    <div class="bg-slate-50 border border-slate-100 rounded p-4 text-sm text-slate-700 space-y-4">
+    <div class="bg-slate-50 border border-slate-100 rounded p-4 text-sm text-slate-700 space-y-4" data-widget-id="widget-all-fields">
         <div class="font-semibold text-slate-800 mb-1">All Fields</div>
         <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
             <div class="{{ base_tile_class }} text-center">
                 <div class="text-xs text-slate-500">CVE</div>
-                <div class="text-inherit">{{ threat.cve_id or "—" }}</div>
+                <div class="text-inherit font-semibold">{{ threat.cve_id or "—" }}</div>
             </div>
             <div class="{{ severity_tile_class }} text-center">
                 <div class="text-xs text-slate-500">Severity</div>
-                <div class="text-inherit">{{ threat.severity or "—" }}</div>
+                <div class="text-inherit font-semibold">{{ threat.severity or "—" }}</div>
             </div>
             <div class="{{ base_tile_class }} text-center">
                 <div class="text-xs text-slate-500">Source</div>
@@ -74,48 +77,57 @@
                     {% set source_label = source_label ~ ' (Product Family: ' ~ (threat.nvd_product_family or threat.products_text or '—') ~ ')' %}
                 {% endif %}
                 {% if threat.link %}
-                    <a class="text-inherit underline" href="{{ threat.link }}" target="_blank" rel="noopener">{{ source_label }}</a>
+                    <a class="text-inherit underline font-semibold" href="{{ threat.link }}" target="_blank" rel="noopener">{{ source_label }}</a>
                 {% else %}
-                    <div class="text-inherit">{{ source_label }}</div>
+                    <div class="text-inherit font-semibold">{{ source_label }}</div>
                 {% endif %}
             </div>
             <div class="{{ base_tile_class }} text-center">
                 <div class="text-xs text-slate-500">Published</div>
-                <div class="text-inherit">{{ threat.published_at_display or "—" }}</div>
+                <div class="text-inherit font-semibold">{{ threat.published_at_display or "—" }}</div>
             </div>
             <div class="{{ base_tile_class }} text-center">
                 <div class="text-xs text-slate-500">KEV Flag</div>
-                <div class="text-inherit">{{ "Yes" if threat.kev_flag else "No" }}</div>
+                <div class="text-inherit font-semibold">{{ "Yes" if threat.kev_flag else "No" }}</div>
             </div>
             <div class="{{ base_tile_class }} text-center">
                 <div class="text-xs text-slate-500">Type</div>
-                <div class="text-inherit">{{ threat.item_type or "—" }}</div>
+                <div class="text-inherit font-semibold">{{ threat.item_type or "—" }}</div>
             </div>
             <div class="{{ base_tile_class }} md:col-span-3">
                 <div class="text-xs text-slate-500 mb-1">Summary</div>
-                <div class="whitespace-pre-wrap text-inherit">{{ (threat.summary or "—")|striptags }}</div>
+                <div class="whitespace-pre-wrap text-inherit font-semibold">{{ (threat.summary or "—")|striptags }}</div>
+            </div>
+            <div class="{{ base_tile_class }} md:col-span-3">
+                <div class="text-xs text-slate-500">Source</div>
+                {% if kev_enrichment and kev_enrichment.kev_source_url %}
+                    <a class="text-inherit underline font-semibold" href="{{ kev_enrichment.kev_source_url }}" target="_blank" rel="noopener">{{ kev_enrichment.kev_source_url }}</a>
+                {% else %}
+                    {% set source_label = threat.source or "—" %}
+                    {% if threat.source and 'nvd' in threat.source|lower %}
+                        {% set source_label = source_label ~ ' (Product Family: ' ~ (threat.nvd_product_family or threat.products_text or '—') ~ ')' %}
+                    {% endif %}
+                    {% if threat.link %}
+                        <a class="text-inherit underline font-semibold" href="{{ threat.link }}" target="_blank" rel="noopener">{{ source_label }}</a>
+                    {% else %}
+                        <div class="text-inherit font-semibold">{{ source_label }}</div>
+                    {% endif %}
+                {% endif %}
             </div>
         </div>
     </div>
 
-    <div class="bg-slate-50 border border-slate-100 rounded p-4 text-sm text-slate-700 space-y-4">
-        <div class="font-semibold text-slate-800 mb-1">CVSS Details</div>
+    <div class="bg-slate-50 border border-slate-100 rounded p-4 text-sm text-slate-700 space-y-4" data-widget-id="widget-cvss">
+        <div class="font-semibold text-slate-800 mb-1">Common Vulnerability Scoring System (CVSS)</div>
         <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
             <div class="{{ cvss_tile_class }} text-center">
                 <div class="text-xs text-slate-500">CVSS Base Score</div>
-                <div class="text-inherit">{{ threat.cvss_base_score or "—" }}</div>
+                <div class="text-inherit font-semibold">{{ threat.cvss_base_score or "—" }}</div>
             </div>
             {% set av_class = base_tile_class %}
-            {% if threat.cvss_av %}
-                {% if 'H' in threat.cvss_av %}
-                    {% set av_class = high_tile_class %}
-                {% elif 'L' in threat.cvss_av %}
-                    {% set av_class = low_tile_class %}
-                {% endif %}
-            {% endif %}
             <div class="{{ av_class }} text-center">
                 <div class="text-xs text-slate-500">Attack Vector (AV)</div>
-                <div class="text-inherit">
+                <div class="text-inherit font-semibold">
                     {% if threat.cvss_av %}
                         {{ threat.cvss_av }} - {{ cvss_labels.av.get(threat.cvss_av, '') }}
                     {% else %}
@@ -125,15 +137,15 @@
             </div>
             {% set ac_class = base_tile_class %}
             {% if threat.cvss_ac %}
-                {% if 'H' in threat.cvss_ac %}
+                {% if threat.cvss_ac == 'H' %}
                     {% set ac_class = high_tile_class %}
-                {% elif 'L' in threat.cvss_ac %}
+                {% elif threat.cvss_ac == 'L' %}
                     {% set ac_class = low_tile_class %}
                 {% endif %}
             {% endif %}
             <div class="{{ ac_class }} text-center">
                 <div class="text-xs text-slate-500">Attack Complexity (AC)</div>
-                <div class="text-inherit">
+                <div class="text-inherit font-semibold">
                     {% if threat.cvss_ac %}
                         {{ threat.cvss_ac }} - {{ cvss_labels.ac.get(threat.cvss_ac, '') }}
                     {% else %}
@@ -143,15 +155,15 @@
             </div>
             {% set pr_class = base_tile_class %}
             {% if threat.cvss_pr %}
-                {% if 'H' in threat.cvss_pr %}
-                    {% set pr_class = high_tile_class %}
-                {% elif 'L' in threat.cvss_pr %}
+                {% if threat.cvss_pr == 'H' %}
+                    {% set pr_class = low_tile_class %}
+                {% elif threat.cvss_pr == 'L' %}
                     {% set pr_class = low_tile_class %}
                 {% endif %}
             {% endif %}
             <div class="{{ pr_class }} text-center">
                 <div class="text-xs text-slate-500">Privileges Required (PR)</div>
-                <div class="text-inherit">
+                <div class="text-inherit font-semibold">
                     {% if threat.cvss_pr %}
                         {{ threat.cvss_pr }} - {{ cvss_labels.pr.get(threat.cvss_pr, '') }}
                     {% else %}
@@ -161,15 +173,13 @@
             </div>
             {% set ui_class = base_tile_class %}
             {% if threat.cvss_ui %}
-                {% if 'H' in threat.cvss_ui %}
+                {% if threat.cvss_ui == 'R' %}
                     {% set ui_class = high_tile_class %}
-                {% elif 'L' in threat.cvss_ui %}
-                    {% set ui_class = low_tile_class %}
                 {% endif %}
             {% endif %}
             <div class="{{ ui_class }} text-center">
                 <div class="text-xs text-slate-500">User Interaction (UI)</div>
-                <div class="text-inherit">
+                <div class="text-inherit font-semibold">
                     {% if threat.cvss_ui %}
                         {{ threat.cvss_ui }} - {{ cvss_labels.ui.get(threat.cvss_ui, '') }}
                     {% else %}
@@ -179,15 +189,15 @@
             </div>
             {% set s_class = base_tile_class %}
             {% if threat.cvss_s %}
-                {% if 'H' in threat.cvss_s %}
+                {% if threat.cvss_s == 'C' %}
                     {% set s_class = high_tile_class %}
-                {% elif 'L' in threat.cvss_s %}
+                {% elif threat.cvss_s == 'U' %}
                     {% set s_class = low_tile_class %}
                 {% endif %}
             {% endif %}
             <div class="{{ s_class }} text-center">
                 <div class="text-xs text-slate-500">Scope (S)</div>
-                <div class="text-inherit">
+                <div class="text-inherit font-semibold">
                     {% if threat.cvss_s %}
                         {{ threat.cvss_s }} - {{ cvss_labels.s.get(threat.cvss_s, '') }}
                     {% else %}
@@ -197,15 +207,15 @@
             </div>
             {% set c_class = base_tile_class %}
             {% if threat.cvss_c %}
-                {% if 'H' in threat.cvss_c %}
+                {% if threat.cvss_c == 'H' %}
                     {% set c_class = high_tile_class %}
-                {% elif 'L' in threat.cvss_c %}
+                {% elif threat.cvss_c == 'L' %}
                     {% set c_class = low_tile_class %}
                 {% endif %}
             {% endif %}
             <div class="{{ c_class }} text-center">
                 <div class="text-xs text-slate-500">Confidentiality (C)</div>
-                <div class="text-inherit">
+                <div class="text-inherit font-semibold">
                     {% if threat.cvss_c %}
                         {{ threat.cvss_c }} - {{ cvss_labels.c.get(threat.cvss_c, '') }}
                     {% else %}
@@ -215,15 +225,15 @@
             </div>
             {% set i_class = base_tile_class %}
             {% if threat.cvss_i %}
-                {% if 'H' in threat.cvss_i %}
+                {% if threat.cvss_i == 'H' %}
                     {% set i_class = high_tile_class %}
-                {% elif 'L' in threat.cvss_i %}
+                {% elif threat.cvss_i == 'L' %}
                     {% set i_class = low_tile_class %}
                 {% endif %}
             {% endif %}
             <div class="{{ i_class }} text-center">
                 <div class="text-xs text-slate-500">Integrity (I)</div>
-                <div class="text-inherit">
+                <div class="text-inherit font-semibold">
                     {% if threat.cvss_i %}
                         {{ threat.cvss_i }} - {{ cvss_labels.i.get(threat.cvss_i, '') }}
                     {% else %}
@@ -233,15 +243,15 @@
             </div>
             {% set a_class = base_tile_class %}
             {% if threat.cvss_a %}
-                {% if 'H' in threat.cvss_a %}
+                {% if threat.cvss_a == 'H' %}
                     {% set a_class = high_tile_class %}
-                {% elif 'L' in threat.cvss_a %}
+                {% elif threat.cvss_a == 'L' %}
                     {% set a_class = low_tile_class %}
                 {% endif %}
             {% endif %}
             <div class="{{ a_class }} text-center">
                 <div class="text-xs text-slate-500">Availability (A)</div>
-                <div class="text-inherit">
+                <div class="text-inherit font-semibold">
                     {% if threat.cvss_a %}
                         {{ threat.cvss_a }} - {{ cvss_labels.a.get(threat.cvss_a, '') }}
                     {% else %}
@@ -252,7 +262,154 @@
         </div>
     </div>
 
-    <div class="bg-slate-50 border border-slate-100 rounded p-4 text-sm text-slate-700 space-y-4">
+    {% if kev_enrichment %}
+    <div class="bg-slate-50 border border-slate-100 rounded p-4 text-sm text-slate-700 space-y-4" data-widget-id="widget-kev">
+        <div class="font-semibold text-slate-800 mb-1">Cybersecurity and Infrastructure Security Agency - Known Exploited Vulnerabilities</div>
+        {% set act_yes = kev_enrichment.kev_action_required not in [None, 0, '0', False, 'false', 'False'] %}
+        {% set exploited = kev_enrichment.known_exploited not in [None, 0, '0', False, 'false', 'False'] %}
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            <div class="{{ base_tile_class }} text-center">
+                <div class="text-xs text-slate-500">Date Added</div>
+                <div class="text-inherit font-semibold">{{ kev_enrichment.date_added_display or "—" }}</div>
+            </div>
+            <div class="{{ base_tile_class }} text-center">
+                <div class="text-xs text-slate-500">Due Date</div>
+                <div class="text-inherit font-semibold">{{ kev_enrichment.due_date_display or "—" }}</div>
+            </div>
+            {% set act_class = 'border rounded p-3 text-center bg-red-50 border-red-200 text-red-900' if act_yes else base_tile_class + ' text-center' %}
+            <div class="{{ act_class }}">
+                <div class="text-xs text-slate-500">Action Required</div>
+                <div class="{% if act_yes %}text-red-900 font-semibold{% else %}text-inherit font-semibold{% endif %}">{{ "Yes" if act_yes else "No" }}</div>
+            </div>
+            <div class="{{ base_tile_class }} text-center">
+                <div class="text-xs text-slate-500">Vendor</div>
+                <div class="text-inherit font-semibold">{{ kev_enrichment.kev_vendor or "—" }}</div>
+            </div>
+            <div class="{{ base_tile_class }} text-center">
+                <div class="text-xs text-slate-500">Product</div>
+                <div class="text-inherit font-semibold">{{ kev_enrichment.kev_product or "—" }}</div>
+            </div>
+            {% set exp_class = 'border rounded p-3 text-center bg-red-50 border-red-200 text-red-900' if exploited else base_tile_class + ' text-center' %}
+            <div class="{{ exp_class }}">
+                <div class="text-xs text-slate-500">Known Exploited</div>
+                <div class="{% if exploited %}text-red-900 font-semibold{% else %}text-inherit font-semibold{% endif %}">{{ "Yes" if exploited else "No" }}</div>
+            </div>
+            <div class="{{ base_tile_class }} md:col-span-3 text-left">
+                <div class="text-xs text-slate-500 mb-1">Description</div>
+                <div class="whitespace-pre-wrap text-inherit font-semibold">{{ kev_enrichment.kev_description or "—" }}</div>
+            </div>
+            <div class="{{ base_tile_class }} md:col-span-3 text-left">
+                <div class="text-xs text-slate-500 mb-1">requiredAction</div>
+                <div class="whitespace-pre-wrap text-inherit font-semibold">{{ kev_enrichment.kev_action_required_text or "—" }}</div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if msrc_enrichment %}
+    <div class="bg-slate-50 border border-slate-100 rounded p-4 text-sm text-slate-700 space-y-4" data-widget-id="widget-msrc">
+        <div class="font-semibold text-slate-800 mb-1">Microsoft Security Response Centre (MSRC)</div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            {% set release_display = msrc_enrichment.msrc_release_title or msrc_enrichment.msrc_release_id %}
+            <div class="{{ base_tile_class }} text-center">
+                <div class="text-xs text-slate-500">Release</div>
+                <div class="text-inherit font-semibold truncate" title="{{ release_display or '—' }}">
+                    {{ release_display or '—' }}
+                </div>
+            </div>
+            <div class="{{ base_tile_class }} text-center">
+                <div class="text-xs text-slate-500">Updated</div>
+                <div class="text-inherit font-semibold">{{ msrc_enrichment.current_display or "—" }}</div>
+            </div>
+            {% set car = msrc_enrichment.msrc_customer_action_required %}
+            {% set car_class = high_tile_class if car else low_tile_class %}
+            <div class="{{ car_class }} text-center">
+                <div class="text-xs text-slate-500">Action required</div>
+                <div class="text-inherit font-semibold">{{ "Yes" if car else "No" }}</div>
+            </div>
+            {% set exp = msrc_enrichment.msrc_exploited %}
+            {% set exp_class = high_tile_class if exp else low_tile_class %}
+            <div class="{{ exp_class }} text-center">
+                <div class="text-xs text-slate-500">Exploited</div>
+                <div class="text-inherit font-semibold">{{ "Yes" if exp else "No" }}</div>
+            </div>
+            {% set pub = msrc_enrichment.msrc_publicly_disclosed %}
+            {% set pub_class = high_tile_class if pub else low_tile_class %}
+            <div class="{{ pub_class }} text-center">
+                <div class="text-xs text-slate-500">Publicly disclosed</div>
+                <div class="text-inherit font-semibold">{{ "Yes" if pub else "No" }}</div>
+            </div>
+            {% if msrc_enrichment.msrc_latest_release %}
+            <div class="{{ base_tile_class }} text-center">
+                <div class="text-xs text-slate-500">Latest software release</div>
+                <div class="text-inherit font-semibold whitespace-pre-wrap">{{ msrc_enrichment.msrc_latest_release }}</div>
+            </div>
+            {% endif %}
+            <div class="{{ base_tile_class }} text-center">
+                <div class="text-xs text-slate-500">Fixed build</div>
+                <div class="text-inherit font-semibold">{{ msrc_enrichment.msrc_fixed_build or "—" }}</div>
+            </div>
+            <div class="{{ base_tile_class }} text-center">
+                <div class="text-xs text-slate-500">CVSS Base</div>
+                <div class="text-inherit font-semibold">{{ msrc_enrichment.msrc_cvss_base_score or "—" }}</div>
+            </div>
+            <div class="{{ base_tile_class }} text-center">
+                <div class="text-xs text-slate-500">Remediation</div>
+                {% set urls = msrc_enrichment.remediation_urls_list or [] %}
+                {% if urls %}
+                    <a class="text-blue-700 underline font-semibold truncate inline-block max-w-full" href="{{ urls[0] }}" title="{{ urls[0] }}" target="_blank" rel="noopener">{{ urls[0] }}</a>
+                {% else %}
+                    <div class="text-inherit font-semibold">—</div>
+                {% endif %}
+            </div>
+            <div class="{{ base_tile_class }} md:col-span-3 text-left">
+                <div class="text-xs text-slate-500 mb-1">Description</div>
+                <div class="whitespace-pre-wrap line-clamp-2 font-semibold">{{ msrc_enrichment.msrc_summary_text or "—" }}</div>
+                {% if msrc_enrichment.msrc_summary_text %}
+                    <details class="text-[11px] text-blue-700 mt-1">
+                        <summary class="cursor-pointer">Expand</summary>
+                        <div class="whitespace-pre-wrap text-slate-700 mt-1">{{ msrc_enrichment.msrc_summary_text }}</div>
+                    </details>
+                {% endif %}
+            </div>
+            <div class="{{ base_tile_class }} md:col-span-3 text-left">
+                <details class="text-xs text-slate-700">
+                    <summary class="cursor-pointer text-sm text-blue-700">More details</summary>
+                    <div class="space-y-2 mt-1">
+                        <div class="text-xs text-slate-600">CVSS Vector: {{ msrc_enrichment.msrc_cvss_vector or "—" }}</div>
+                        <div class="text-xs text-slate-600">Affected products:
+                            {% if msrc_enrichment.products_list %}
+                                <ul class="list-disc list-inside">
+                                    {% for p in msrc_enrichment.products_list %}
+                                        <li>{{ p }}</li>
+                                    {% endfor %}
+                                </ul>
+                            {% else %}
+                                —
+                            {% endif %}
+                        </div>
+                        <div class="text-xs text-slate-600">Remediation URLs:
+                            {% if urls %}
+                                <ul class="list-disc list-inside">
+                                    {% for u in urls %}
+                                        <li><a class="text-blue-700 underline" href="{{ u }}" target="_blank" rel="noopener">{{ u }}</a></li>
+                                    {% endfor %}
+                                </ul>
+                            {% else %}
+                                —
+                            {% endif %}
+                        </div>
+                        {% if msrc_enrichment.msrc_cvrf_url %}
+                        <div class="text-xs text-slate-600">CVRF: <a class="text-blue-700 underline" href="{{ msrc_enrichment.msrc_cvrf_url }}" target="_blank" rel="noopener">{{ msrc_enrichment.msrc_cvrf_url }}</a></div>
+                        {% endif %}
+                    </div>
+                </details>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="bg-slate-50 border border-slate-100 rounded p-4 text-sm text-slate-700 space-y-4" data-widget-id="widget-products">
         <div class="font-semibold text-slate-800 mb-1">Products</div>
         <div class="{{ base_tile_class }}">
             <div class="text-xs text-slate-500">Products</div>
@@ -260,7 +417,7 @@
         </div>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3" data-widget-id="widget-raw-history">
         <div class="bg-slate-50 border border-slate-100 rounded p-4 text-sm text-slate-700 space-y-3">
             <div class="font-semibold text-slate-800 mb-1">Raw / Full Data</div>
             <details class="text-xs text-slate-700">
@@ -293,8 +450,12 @@
                 <div class="space-y-2 max-h-[400px] overflow-auto pr-2">
                     {% for h in history %}
                         <div class="border border-slate-100 rounded p-2 bg-white">
-                            <div class="text-[11px] text-slate-600">Source: {{ h.source }} • Action: {{ h.action }} • {{ h.created_at }}</div>
-                            <div class="text-[11px] text-slate-700">Changed: {{ h.changed_fields or '—' }}</div>
+                            <div class="text-[11px] text-slate-600 flex flex-wrap gap-2 items-center">
+                                <span class="whitespace-nowrap font-semibold">{{ h.source }}</span>
+                                <span class="whitespace-nowrap">• {{ h.action }}</span>
+                                <span class="whitespace-nowrap">• {{ h.created_at_display or h.created_at }}</span>
+                                <span class="whitespace-pre-wrap break-words">• Changed: {{ h.changed_fields or '—' }}</span>
+                            </div>
                         </div>
                     {% endfor %}
                 </div>
@@ -302,6 +463,39 @@
                 <div class="text-xs text-slate-600">No history recorded for this CVE yet.</div>
             {% endif %}
         </div>
+    </div>
+
+    <div class="bg-slate-50 border border-slate-100 rounded p-4 text-sm text-slate-700 space-y-3" data-widget-id="widget-secondary-sources">
+        <div class="flex items-center justify-between">
+            <div class="font-semibold text-slate-800">Secondary Sources</div>
+            {% if threat.cve_id %}
+            <form method="POST" action="/admin/threats/{{ threat.id }}/apply_feeds">
+                <button class="bg-blue-600 text-white px-3 py-2 rounded text-sm" type="submit">Re-apply enrichment</button>
+            </form>
+            {% endif %}
+        </div>
+        {% if feed_entries %}
+        <div class="space-y-2">
+            {% for entry in feed_entries %}
+            <div class="border border-slate-200 rounded p-2 bg-white text-xs">
+                <div class="flex items-center justify-between">
+                    <div class="font-semibold text-slate-800">{{ entry.source }} • {{ entry.fetched_at or '—' }}</div>
+                    {% if entry.status %}
+                    <span class="text-[11px] px-1.5 py-0.5 rounded-full bg-slate-50 text-slate-700 border border-slate-200">{{ entry.status }}</span>
+                    {% endif %}
+                </div>
+                <div class="text-slate-700">Products: {{ entry.products_text or '—' }}</div>
+                <div class="text-slate-700">KEV: {{ 'Yes' if entry.kev_flag else 'No' }}</div>
+                <details class="mt-1">
+                    <summary class="cursor-pointer text-blue-700">View raw payload</summary>
+                    <pre class="bg-slate-50 border border-slate-200 rounded p-2 mt-1 whitespace-pre-wrap overflow-auto max-h-[240px]">{{ entry.raw_payload }}</pre>
+                </details>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-xs text-slate-600">No secondary feed data captured for this CVE yet.</div>
+        {% endif %}
     </div>
 
     {% if is_msrc %}

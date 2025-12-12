@@ -2192,6 +2192,9 @@ def admin_threats():
     threats_page = threats[start:end]
     sources = ["CISA-KEV", "ACSC", "MSRC", "NVD", "APPLE"]
     stats = db.admin_threat_summary(sources)
+    feed_entry_counts = db.admin_feed_entry_counts(sources)
+    nvd_cisa_overlap = db.count_nvd_with_feed("CISA-KEV")
+    nvd_msrc_overlap = db.count_nvd_with_feed("MSRC")
     recent_counts = db.admin_threat_recent_counts(sources, days=7)
     ingest_history = []
     last_ingest_run = None
@@ -2250,6 +2253,7 @@ def admin_threats():
         "APPLE": "apple",
         "Apple": "apple",
         "Apple Security Updates": "apple",
+        "CISA Known Exploited Vulnerabilities (CISA)": "cisa",
     })
     feed_roles = {
         "nvd": "Primary",
@@ -2275,6 +2279,9 @@ def admin_threats():
         recent_counts=recent_counts,
         ingest_history=ingest_history,
         last_ingest_run=last_ingest_run,
+        feed_entry_counts=feed_entry_counts,
+        nvd_cisa_overlap=nvd_cisa_overlap,
+        nvd_msrc_overlap=nvd_msrc_overlap,
         nvd_config=nvd_config,
         pagination={
             "page": page,
@@ -2345,6 +2352,23 @@ def admin_threats_enrich_cve():
     threat_ingestion.enrich_all_cve_sources()
     flash("CVE enrichment (MSRC + CISA-KEV) has been run.")
     return redirect(url_for("admin_threats"))
+
+
+@app.route("/admin/threats/<int:threat_id>/apply_feeds", methods=["POST"])
+@admin_required
+def admin_threat_apply_feeds(threat_id):
+    """Apply stored feed entries to a specific CVE/master record."""
+    try:
+        from . import threat_ingestion  # type: ignore
+    except ImportError:
+        import compliance_app.compliance_app_tailwind.threat_ingestion as threat_ingestion
+    master = db.admin_get_threat(threat_id)
+    if not master or not master.get("cve_id"):
+        flash("Threat not found or missing CVE.")
+        return redirect(url_for("admin_threats"))
+    applied = threat_ingestion.apply_feed_entries_for_cve(master["cve_id"])
+    flash(f"Applied {applied} feed entr{'y' if applied==1 else 'ies'} to CVE {master['cve_id']}.")
+    return redirect(url_for("admin_threat_detail", threat_id=threat_id))
 
 
 @app.route("/admin/threats/nvd_filters", methods=["POST"])
@@ -2424,10 +2448,22 @@ def admin_threats_rollback():
 def admin_threats_delete():
     """Delete all threats for a given source (testing only)."""
     source = (request.form.get("source") or "").upper()
+    # Normalize UI key to canonical source stored in DB
+    alias_map = {
+        "CISA": "CISA-KEV",
+        "CISA-KEV": "CISA-KEV",
+        "MSRC": "MSRC",
+        "NVD": "NVD",
+        "ACSC": "ACSC",
+        "APPLE": "APPLE",
+    }
+    canonical = alias_map.get(source, source)
     if not source:
         flash("No source provided.")
         return redirect(url_for("admin_threats"))
-    deleted = db.admin_delete_threats_by_source(source)
+    deleted = db.admin_delete_threats_by_source(canonical)
+    feed_deleted = db.admin_delete_feed_entries_by_source(canonical)
+    kev_deleted = 0
     # Also remove source from contrib_sources on merged records
     def _clean_source(src):
         cleaned_local = 0
@@ -2455,12 +2491,20 @@ def admin_threats_delete():
         conn_local.close()
         return cleaned_local
 
-    cleaned = _clean_source(source)
-    if source == "NVD":
+    cleaned = _clean_source(canonical)
+    if canonical == "NVD":
         # Also purge CISA-KEV rows and remove their contributions when NVD is wiped
         deleted += db.admin_delete_threats_by_source("CISA-KEV")
+        feed_deleted += db.admin_delete_feed_entries_by_source("CISA-KEV")
+        kev_deleted += db.admin_delete_kev_enrichment()
         cleaned += _clean_source("CISA-KEV")
-    flash(f"Deleted {deleted} threat(s) from {source}. Cleaned {cleaned} merged record(s).")
+    if canonical == "CISA-KEV":
+        kev_deleted += db.admin_delete_kev_enrichment()
+    flash(f"Deleted {deleted} threat(s) from {canonical}. Cleaned {cleaned} merged record(s).")
+    if feed_deleted:
+        flash(f"Deleted {feed_deleted} stored feed entry(ies) for {canonical}.")
+    if kev_deleted:
+        flash(f"Deleted {kev_deleted} KEV enrichment record(s).")
     return redirect(url_for("admin_threats", source=source.lower()))
 
 
@@ -2472,11 +2516,26 @@ def admin_threat_detail(threat_id):
     if not threat:
         return NOT_FOUND, 404
     history = []
+    feed_entries = []
+    kev_enrichment = None
+    msrc_enrichment = None
     if threat.get("cve_id"):
         try:
             history = db.get_cve_history(threat["cve_id"])
         except Exception:
             history = []
+        try:
+            feed_entries = db.get_feed_entries_by_cve(threat["cve_id"])
+        except Exception:
+            feed_entries = []
+        try:
+            kev_enrichment = db.get_kev_enrichment(threat["cve_id"])
+        except Exception:
+            kev_enrichment = None
+        try:
+            msrc_enrichment = db.get_msrc_enrichment(threat["cve_id"])
+        except Exception:
+            msrc_enrichment = None
     def _fmt_dt_time(val):
         if not val:
             return "—"
@@ -2503,13 +2562,60 @@ def admin_threat_detail(threat_id):
     if created_dt and updated_dt and updated_dt > created_dt:
         threat["badge_updated"] = True
     threat["published_at_display"] = _fmt_dt_time(threat.get("published_at"))
+    if kev_enrichment:
+        kev_enrichment["date_added_display"] = _fmt_dt_time(kev_enrichment.get("kev_date_added"))
+        kev_enrichment["due_date_display"] = _fmt_dt_time(kev_enrichment.get("kev_due_date"))
+        kev_enrichment["kev_action_required_text"] = kev_enrichment.get("kev_required_action") or "—"
+    if msrc_enrichment:
+        msrc_enrichment["initial_display"] = _fmt_dt_time(msrc_enrichment.get("msrc_initial_release_utc"))
+        msrc_enrichment["current_display"] = _fmt_dt_time(msrc_enrichment.get("msrc_current_release_utc"))
+        msrc_enrichment["last_seen_display"] = _fmt_dt_time(msrc_enrichment.get("last_seen_utc"))
+        # decode lists
+        import json as _json
+        try:
+            products_json = msrc_enrichment.get("msrc_affected_products")
+            msrc_enrichment["products_list"] = _json.loads(products_json) if products_json else []
+        except Exception:
+            msrc_enrichment["products_list"] = []
+        try:
+            rem_urls_json = msrc_enrichment.get("msrc_remediation_urls")
+            msrc_enrichment["remediation_urls_list"] = _json.loads(rem_urls_json) if rem_urls_json else []
+        except Exception:
+            msrc_enrichment["remediation_urls_list"] = []
+        # parse exploitability string into parts
+        try:
+            expl_raw = msrc_enrichment.get("msrc_exploitability_assessment") or ""
+            parts = {}
+            for seg in expl_raw.split(";"):
+                if ":" in seg:
+                    k, v = seg.split(":", 1)
+                    parts[k.strip()] = v.strip()
+            msrc_enrichment["exploitability_parts"] = parts
+            msrc_enrichment["msrc_latest_release"] = parts.get("Latest Software Release") or parts.get("Latest Software")
+        except Exception:
+            msrc_enrichment["exploitability_parts"] = {}
+    if history:
+        for h in history:
+            try:
+                h["created_at_display"] = _fmt_dt_time(h.get("created_at"))
+            except Exception:
+                h["created_at_display"] = h.get("created_at")
     back_params = {
         "source": request.args.get("source") or "",
         "q": request.args.get("q") or "",
         "severity": request.args.get("severity") or "",
         "page": request.args.get("page") or "",
     }
-    return render_template("admin_threat_detail.html", threat=threat, history=history, back_params=back_params, page_name="templates/admin_threat_detail.html")
+    return render_template(
+        "admin_threat_detail.html",
+        threat=threat,
+        history=history,
+        feed_entries=feed_entries,
+        kev_enrichment=kev_enrichment,
+        msrc_enrichment=msrc_enrichment,
+        back_params=back_params,
+        page_name="templates/admin_threat_detail.html",
+    )
 
 
 # Placeholder loader for threat by CVE
