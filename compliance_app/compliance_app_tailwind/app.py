@@ -13,7 +13,7 @@ and shaping data for templates.
 
 from flask import Flask, render_template, request, redirect, url_for, session, flash, Response, abort, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime, date
+from datetime import datetime, date, timedelta, timezone
 import sys
 from pathlib import Path
 import requests
@@ -2092,27 +2092,90 @@ def admin_threats():
             return dt.strftime("%d/%m/%Y")
         except Exception:
             return val
+    def _fmt_dt_time(val):
+        if not val:
+            return "—"
+        try:
+            dt = datetime.fromisoformat(str(val).replace("Z", "+00:00"))
+            return dt.strftime("%d/%m/%Y %I:%M %p")
+        except Exception:
+            return val
 
     source = request.args.get("source") or ""
-    source_map = {"msrc": "MSRC", "microsoft": "MSRC"}
+    source_map = {
+        "msrc": "MSRC",
+        "microsoft": "MSRC",
+        "nvd": "NVD",
+        "acsc": "ACSC",
+        "cisa": "CISA-KEV",
+        "apple": "APPLE",
+    }
     source_filter = source_map.get(source.lower(), source)
     q = request.args.get("q") or ""
     severity = request.args.get("severity") or ""
-    # Refresh connectivity status on load
-    for _src in ["cisa", "acsc", "msrc", "nvd"]:
-        try:
-            threat_ingestion.check_source_connectivity(_src)
-        except Exception:
-            pass
+    date_range = request.args.get("date_range") or ""
+    kev_filter = request.args.get("kev_flag") or ""
     raw_threats = db.admin_list_threats(
         source=source_filter if source and source != "all" and source != "none" else None,
         q=q or None,
         severity=severity if severity and severity.lower() != "all" else None,
+        kev_filter=kev_filter if kev_filter in ["yes", "no"] else None,
     )
+    def _parse_dt(val):
+        if not val:
+            return None
+        try:
+            if isinstance(val, datetime):
+                dt = val
+            else:
+                dt = datetime.fromisoformat(str(val).replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt
+        except Exception:
+            return None
+    if date_range:
+        now = datetime.now(timezone.utc)
+        start_dt = None
+        if date_range == "today":
+            start_dt = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+        elif date_range == "week":
+            start_dt = now - timedelta(days=7)
+        elif date_range == "month":
+            start_dt = now - timedelta(days=30)
+        if start_dt:
+            filtered = []
+            for t in raw_threats:
+                pub_dt = _parse_dt(t.get("published_at")) or _parse_dt(t.get("created_at")) or _parse_dt(t.get("updated_at"))
+                if not pub_dt:
+                    continue
+                if pub_dt >= start_dt:
+                    filtered.append(t)
+            raw_threats = filtered
     threats = []
+    badge_threshold_days = 7
     for t in raw_threats:
         row = dict(t)
         row["published_fmt"] = _fmt_dt(row.get("published_at"))
+        created_raw = row.get("created_at")
+        updated_raw = row.get("updated_at")
+        is_enriched = bool(row.get("is_enriched"))
+        row["badge_enriched"] = is_enriched
+        try:
+            created_dt = datetime.fromisoformat(created_raw) if created_raw else None
+        except Exception:
+            created_dt = None
+        try:
+            updated_dt = datetime.fromisoformat(updated_raw) if updated_raw else None
+        except Exception:
+            updated_dt = None
+        if created_dt:
+            row["badge_new"] = (datetime.utcnow() - created_dt).days <= badge_threshold_days and not is_enriched
+        else:
+            row["badge_new"] = False
+        row["badge_updated"] = False
+        if created_dt and updated_dt and updated_dt > created_dt:
+            row["badge_updated"] = True
         threats.append(row)
 
     # Simple pagination (default 5 per page)
@@ -2127,12 +2190,39 @@ def admin_threats():
     start = (page - 1) * per_page
     end = start + per_page
     threats_page = threats[start:end]
-    sources = ["CISA-KEV", "ACSC", "MSRC", "NVD"]
+    sources = ["CISA-KEV", "ACSC", "MSRC", "NVD", "APPLE"]
     stats = db.admin_threat_summary(sources)
+    recent_counts = db.admin_threat_recent_counts(sources, days=7)
+    ingest_history = []
+    last_ingest_run = None
+    if source:
+        try:
+            ingest_history = db.get_ingest_runs(source.upper(), limit=5)
+            last_ingest_run = ingest_history[0] if ingest_history else None
+            for run in ingest_history:
+                try:
+                    dt_start = datetime.fromisoformat(str(run.get("started_at")).replace("Z", "+00:00"))
+                    run["started_date"] = dt_start.strftime("%d/%m/%Y")
+                    run["started_time"] = dt_start.strftime("%I:%M %p")
+                except Exception:
+                    run["started_date"] = run.get("started_at")
+                    run["started_time"] = ""
+                try:
+                    dt_finish = datetime.fromisoformat(str(run.get("finished_at")).replace("Z", "+00:00"))
+                    run["finished_date"] = dt_finish.strftime("%d/%m/%Y")
+                    run["finished_time"] = dt_finish.strftime("%I:%M %p")
+                except Exception:
+                    run["finished_date"] = run.get("finished_at")
+                    run["finished_time"] = ""
+        except Exception:
+            ingest_history = []
+            last_ingest_run = None
     for _, stat in stats.items():
         stat["last_created_fmt"] = _fmt_dt(stat.get("last_created"))
+        stat["last_activity_fmt"] = _fmt_dt(stat.get("last_activity"))
 
     raw_status = threat_ingestion.get_last_status()
+    nvd_config = threat_ingestion.get_nvd_filter_config()
     last_status = {}
     for k, v in raw_status.items():
         last_status[k] = {
@@ -2143,24 +2233,49 @@ def admin_threats():
         }
 
     feed_labels = {
-        "cisa": "CISA Known Exploited Vulnerabilities",
-        "acsc": "ACSC Alerts",
-        "msrc": "MSRC Security Updates",
-        "nvd": "NVD CVEs (High/Critical)",
+        "cisa": "CISA-KEV",
+        "acsc": "ACSC",
+        "msrc": "MSRC",
+        "nvd": "NVD",
+        "apple": "Apple Security Updates",
     }
     feed_key_lookup = {v: k for k, v in feed_labels.items()}
-    feed_key_lookup.update({"CISA-KEV": "cisa", "ACSC": "acsc", "MSRC": "msrc", "NVD": "nvd"})
+    feed_key_lookup.update({
+        "CISA-KEV": "cisa",
+        "ACSC": "acsc",
+        "MSRC": "msrc",
+        "NVD": "nvd",
+        "National Vulnerability Database": "nvd",
+        "National Vulnerability Database (NVD), published by NIST": "nvd",
+        "APPLE": "apple",
+        "Apple": "apple",
+        "Apple Security Updates": "apple",
+    })
+    feed_roles = {
+        "nvd": "Primary",
+        "acsc": "Primary",
+        "cisa": "Secondary",
+        "msrc": "Secondary",
+        "apple": "Secondary",
+    }
     return render_template(
         "admin_threats.html",
         threats=threats_page,
         source=source,
         q=q,
         severity=severity,
+        kev_filter=kev_filter,
+        date_range=date_range,
         sources=sources,
         stats=stats,
         last_errors=last_status,
         feed_labels=feed_labels,
         feed_key_lookup=feed_key_lookup,
+        feed_roles=feed_roles,
+        recent_counts=recent_counts,
+        ingest_history=ingest_history,
+        last_ingest_run=last_ingest_run,
+        nvd_config=nvd_config,
         pagination={
             "page": page,
             "total_pages": total_pages,
@@ -2176,17 +2291,82 @@ def admin_threats():
 def admin_threats_fetch():
     """Trigger ingestion for a given source and redirect back."""
     source = (request.form.get("source") or "").lower()
-    inserted = threat_ingestion.ingest_source(source)
-    if inserted:
-        flash(f"Ingested {inserted} record(s) from {source.upper()}.")
+    # Import threat_ingestion safely for both package and script runs
+    try:
+        from . import threat_ingestion  # type: ignore
+    except ImportError:
+        import compliance_app.compliance_app_tailwind.threat_ingestion as threat_ingestion
+    # If NVD and filters are provided, persist them before ingest
+    if source == "nvd":
+        try:
+            days_raw = request.form.get("nvd_days")
+            days = int(days_raw) if days_raw else 10
+            if days <= 0:
+                days = 10
+        except Exception:
+            days = 10
+        keywords_raw = request.form.get("nvd_keywords") or ""
+        keywords = [k.strip() for k in keywords_raw.split(",") if k.strip()]
+        threat_ingestion.save_nvd_filter_config(days, keywords)
+
+    result = threat_ingestion.ingest_source(source)
+    inserted = updated = skipped = 0
+    if isinstance(result, tuple):
+        if len(result) == 3:
+            inserted, updated, skipped = result
+        elif len(result) == 2:
+            inserted, updated = result
+        elif len(result) == 1:
+            inserted = result[0]
+    else:
+        inserted = result
+    if inserted or updated:
+        extra = f" / Skipped (no base CVE): {skipped}" if skipped else ""
+        flash(f"Ingested {inserted} new / Updated {updated}{extra} from {source.upper()}.")
     else:
         status_entry = threat_ingestion.get_last_status().get(source, {}) or {}
         err_msg = status_entry.get("error")
         if err_msg:
-            flash(f"No records ingested from {source.upper()}: {err_msg}")
+            flash(f"No records ingested/updated from {source.upper()}: {err_msg}")
         else:
-            flash(f"No records ingested from {source.upper()}.")
+            flash(f"No records ingested/updated from {source.upper()}.")
     return redirect(url_for("admin_threats", source=source))
+
+@app.route("/admin/threats/enrich_cve", methods=["POST"])
+@admin_required
+def admin_threats_enrich_cve():
+    """
+    Run CVE enrichment: MSRC and CISA-KEV applied to NVD rows.
+    """
+    try:
+        from . import threat_ingestion  # type: ignore
+    except ImportError:
+        import compliance_app.compliance_app_tailwind.threat_ingestion as threat_ingestion
+    threat_ingestion.enrich_all_cve_sources()
+    flash("CVE enrichment (MSRC + CISA-KEV) has been run.")
+    return redirect(url_for("admin_threats"))
+
+
+@app.route("/admin/threats/nvd_filters", methods=["POST"])
+@admin_required
+def admin_threats_nvd_filters():
+    """Update NVD filter settings (days and keywords)."""
+    try:
+        days = int(request.form.get("nvd_days") or 10)
+        if days <= 0:
+            days = 10
+    except Exception:
+        days = 10
+    keywords_raw = request.form.get("nvd_keywords") or ""
+    keywords = [k.strip() for k in keywords_raw.split(",") if k.strip()]
+    try:
+        from . import threat_ingestion  # type: ignore
+    except ImportError:
+        import compliance_app.compliance_app_tailwind.threat_ingestion as threat_ingestion
+
+    threat_ingestion.save_nvd_filter_config(days, keywords)
+    flash(f"NVD filters updated: {days} day window; keywords: {', '.join(keywords) if keywords else 'none'}")
+    return redirect(url_for("admin_threats", source="nvd"))
 
 
 @app.route("/admin/threats/check/", methods=["POST"])
@@ -2203,6 +2383,42 @@ def admin_threats_check():
     return redirect(url_for("admin_threats", source=source))
 
 
+@app.route("/admin/threats/stop/", methods=["POST"])
+@admin_required
+def admin_threats_stop():
+    """Request an in-progress feed ingest to stop."""
+    source = (request.form.get("source") or "").lower()
+    if not source:
+        flash("No source selected to stop.")
+        return redirect(url_for("admin_threats"))
+    threat_ingestion.abort_ingest(source)
+    flash(f"Stop requested for {source.upper()}.")
+    return redirect(url_for("admin_threats", source=source))
+
+
+@app.route("/admin/threats/status", methods=["GET"])
+@admin_required
+def admin_threats_status():
+    """Return last ingest status (including progress) for polling."""
+    return jsonify(threat_ingestion.get_last_status())
+
+
+@app.route("/admin/threats/rollback/", methods=["POST"])
+@admin_required
+def admin_threats_rollback():
+    """Rollback last ingest for a source (deletes inserted rows only)."""
+    source = (request.form.get("source") or "").upper()
+    if not source:
+        flash("No source provided for rollback.")
+        return redirect(url_for("admin_threats"))
+    deleted, run = db.rollback_last_ingest(source)
+    if run:
+        flash(f"Rolled back ingest {run.get('id')} for {source}, deleted {deleted} inserted rows.")
+    else:
+        flash(f"No ingest runs found for {source}.")
+    return redirect(url_for("admin_threats", source=source.lower()))
+
+
 @app.route("/admin/threats/delete/", methods=["POST"])
 @admin_required
 def admin_threats_delete():
@@ -2212,7 +2428,39 @@ def admin_threats_delete():
         flash("No source provided.")
         return redirect(url_for("admin_threats"))
     deleted = db.admin_delete_threats_by_source(source)
-    flash(f"Deleted {deleted} threat(s) from {source}.")
+    # Also remove source from contrib_sources on merged records
+    def _clean_source(src):
+        cleaned_local = 0
+        conn_local = db.get_connection()
+        cur_local = conn_local.cursor()
+        cur_local.execute(
+            "SELECT id, contrib_sources, kev_flag FROM threat_objects WHERE contrib_sources LIKE ?",
+            (f"%{src}%",),
+        )
+        rows_local = cur_local.fetchall()
+        for row in rows_local:
+            cs = row["contrib_sources"] or ""
+            parts = [p.strip() for p in cs.split(",") if p.strip()]
+            parts = [p for p in parts if p.upper() != src]
+            new_cs = ", ".join(parts)
+            kev_flag = row["kev_flag"]
+            if src == "CISA-KEV":
+                kev_flag = 0
+            cur_local.execute(
+                "UPDATE threat_objects SET contrib_sources=?, kev_flag=? WHERE id=?",
+                (new_cs if new_cs else None, kev_flag, row["id"]),
+            )
+            cleaned_local += 1
+        conn_local.commit()
+        conn_local.close()
+        return cleaned_local
+
+    cleaned = _clean_source(source)
+    if source == "NVD":
+        # Also purge CISA-KEV rows and remove their contributions when NVD is wiped
+        deleted += db.admin_delete_threats_by_source("CISA-KEV")
+        cleaned += _clean_source("CISA-KEV")
+    flash(f"Deleted {deleted} threat(s) from {source}. Cleaned {cleaned} merged record(s).")
     return redirect(url_for("admin_threats", source=source.lower()))
 
 
@@ -2223,13 +2471,45 @@ def admin_threat_detail(threat_id):
     threat = db.admin_get_threat(threat_id)
     if not threat:
         return NOT_FOUND, 404
+    history = []
+    if threat.get("cve_id"):
+        try:
+            history = db.get_cve_history(threat["cve_id"])
+        except Exception:
+            history = []
+    def _fmt_dt_time(val):
+        if not val:
+            return "—"
+        try:
+            dt = datetime.fromisoformat(str(val).replace("Z", "+00:00"))
+            return dt.strftime("%d/%m/%Y %I:%M %p")
+        except Exception:
+            return val
+    badge_threshold_days = 7
+    try:
+        created_dt = datetime.fromisoformat(threat.get("created_at")) if threat.get("created_at") else None
+    except Exception:
+        created_dt = None
+    try:
+        updated_dt = datetime.fromisoformat(threat.get("updated_at")) if threat.get("updated_at") else None
+    except Exception:
+        updated_dt = None
+    threat["badge_enriched"] = bool(threat.get("is_enriched"))
+    if created_dt:
+        threat["badge_new"] = (datetime.utcnow() - created_dt).days <= badge_threshold_days and not threat["badge_enriched"]
+    else:
+        threat["badge_new"] = False
+    threat["badge_updated"] = False
+    if created_dt and updated_dt and updated_dt > created_dt:
+        threat["badge_updated"] = True
+    threat["published_at_display"] = _fmt_dt_time(threat.get("published_at"))
     back_params = {
         "source": request.args.get("source") or "",
         "q": request.args.get("q") or "",
         "severity": request.args.get("severity") or "",
         "page": request.args.get("page") or "",
     }
-    return render_template("admin_threat_detail.html", threat=threat, back_params=back_params, page_name="templates/admin_threat_detail.html")
+    return render_template("admin_threat_detail.html", threat=threat, history=history, back_params=back_params, page_name="templates/admin_threat_detail.html")
 
 
 # Placeholder loader for threat by CVE

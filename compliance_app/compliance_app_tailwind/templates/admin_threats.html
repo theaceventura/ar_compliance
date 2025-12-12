@@ -9,133 +9,321 @@
         </div>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {% for key,label in [('cisa','CISA-KEV'),('acsc','ACSC'),('msrc','MSRC'),('nvd','NVD')] %}
+    <div class="space-y-4">
+        {% set primary_feeds = [('acsc','ACSC'),('nvd','NVD')] %}
+        {% set secondary_feeds = [('cisa','CISA-KEV'),('msrc','MSRC'),('apple','APPLE')] %}
+        <div>
+            <div class="text-sm font-semibold text-slate-800 mb-2">Primary Feeds</div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {% for key,label in primary_feeds %}
         {% set stat = stats.get(label, {}) %}
         {% set ok = stat.count and stat.count > 0 %}
         {% set status_entry = last_errors.get(key) or {} %}
         {% set err = status_entry.get('error') %}
-        {% set status_class = 'bg-green-500' if ok else ('bg-red-500' if err else 'bg-amber-500') %}
         {% set status_text = 'OK' if ok else (err or 'Never fetched / no data yet') %}
         {% set last_checked = status_entry.get('checked_at') %}
         {% set progress = status_entry.get('progress') %}
+        {% set p = 0 %}
+        {% if progress is not none %}
+            {% set p = progress %}
+            {% if p < 0 %}{% set p = 0 %}{% endif %}
+            {% if p > 100 %}{% set p = 100 %}{% endif %}
+        {% endif %}
         {% set msg = status_entry.get('message') %}
-        <div class="bg-slate-50 border border-slate-200 rounded p-4 flex items-start justify-between">
-            <div>
-                <div class="flex items-center gap-2">
-                    <div class="w-3 h-3 rounded-full {{ status_class }}" title="{{ status_text }}"></div>
-                    <div class="text-sm font-semibold text-slate-800">{{ feed_labels.get(key, label) }}</div>
-                </div>
-                <div class="text-xs text-slate-600">Last run: {{ stat.last_created_fmt or stat.last_created or '—' }}</div>
-                <div class="text-xs text-slate-600">Total ingested: {{ stat.count or 0 }}</div>
-                <div class="text-xs text-slate-600">Last check: {{ last_checked or '—' }}</div>
-                {% if msg %}
-                <div class="text-xs text-slate-700">Status: {{ msg }}</div>
-                {% endif %}
-                {% if err %}
-                <div class="text-xs text-red-700 font-semibold">Last error: {{ err }}</div>
-                {% elif not ok %}
-                <div class="text-xs text-amber-700 font-semibold">Reason: Never fetched / no data ingested yet.</div>
-                {% endif %}
-                {% if progress is not none %}
-                <div class="mt-2">
-                    <div class="h-2 bg-slate-200 rounded-full overflow-hidden">
-                        <div class="h-2 bg-blue-500" style="width: {{ progress if progress<=100 else 100 }}%"></div>
+        {% set last_run_val = stat.last_activity_fmt or stat.last_activity or stat.last_created_fmt or stat.last_created or '—' %}
+        {% set last_run_date = last_run_val.split(' ')[0] if last_run_val else '—' %}
+        {% set tile_bg = 'bg-green-50 border-green-200' if ok else ('bg-red-50 border-red-200' if err else 'bg-amber-50 border-amber-200') %}
+        <div class="border rounded p-4 flex flex-col gap-3 {{ tile_bg }} feed-tile cursor-pointer" data-feed="{{ key }}">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <div class="text-sm font-semibold text-slate-800">
+                        {% if key == 'nvd' %}
+                            National Vulnerability Database (NVD)
+                            <div class="text-xs text-slate-600">Published by NIST</div>
+                        {% elif key == 'acsc' %}
+                            Australian Cyber Security Centre (ACSC)
+                            <div class="text-xs text-slate-600">Published by ACSC</div>
+                        {% elif key == 'cisa' %}
+                            CISA Known Exploited Vulnerabilities
+                            <div class="text-xs text-slate-600">Published by CISA</div>
+                        {% elif key == 'msrc' %}
+                            Microsoft Security Response Center (MSRC)
+                            <div class="text-xs text-slate-600">Published by Microsoft</div>
+                        {% else %}
+                            {{ feed_labels.get(key, label) }}
+                        {% endif %}
                     </div>
-                    <div class="text-[11px] text-slate-600 mt-0.5">{{ progress }}% complete</div>
+                    <div class="text-xs text-slate-600 flex flex-wrap gap-3">
+                        <span>Last check: {{ last_checked or '—' }}</span>
+                        <span>Last run: {{ last_run_date }}</span>
+                    </div>
+                    {% if key == 'nvd' and nvd_config %}
+                    <div class="text-xs text-slate-600">Filters: last {{ nvd_config.days }} days; fallback keywords: {{ nvd_config.keywords|join(', ') }}.</div>
+                    {% endif %}
+                    <div class="text-xs text-slate-600">Total ingested: {{ stat.count or 0 }}</div>
+                    <div class="text-xs text-slate-700" data-status-text="{{ key }}">Status: {{ msg or '—' }}</div>
+                    <div class="text-xs text-red-700 font-semibold {% if not err %}hidden{% endif %}" data-status-error="{{ key }}">Last error: {{ err }}</div>
+                    {% if not err and not ok %}
+                    <div class="text-xs text-amber-700 font-semibold">Reason: Never fetched / no data ingested yet.</div>
+                    {% endif %}
+                    <div class="mt-2 {% if progress is none %}hidden{% endif %}" data-progress-container="{{ key }}">
+                        <div class="h-2 bg-slate-200 rounded-full overflow-hidden">
+                            <div class="h-2 bg-blue-500" data-progress-bar="{{ key }}" style="width: {{ p }}%"></div>
+                        </div>
+                        <div class="text-[11px] text-slate-600 mt-0.5" data-progress-text="{{ key }}">{{ p }}% complete</div>
+                    </div>
                 </div>
-                {% endif %}
-            </div>
-            <div class="flex flex-col gap-2">
-                <form method="POST" action="/admin/threats/check/">
-                    <input type="hidden" name="source" value="{{ key }}">
-                    <button class="bg-slate-200 text-slate-800 px-3 py-2 rounded text-sm w-full">Check</button>
-                </form>
-                <form method="POST" action="/admin/threats/fetch/">
-                    <input type="hidden" name="source" value="{{ key }}">
-                    <button class="bg-blue-600 text-white px-3 py-2 rounded text-sm w-full">Fetch</button>
-                </form>
-                <form method="POST" action="/admin/threats/delete/" onsubmit="return confirm('Delete all threats for {{ feed_labels.get(key,label) }}?');">
-                    <input type="hidden" name="source" value="{{ label }}">
-                    <button class="bg-red-100 text-red-800 px-3 py-2 rounded text-sm w-full border border-red-200">Delete</button>
-                </form>
             </div>
         </div>
         {% endfor %}
+            </div>
+        </div>
+        <div>
+            <div class="text-sm font-semibold text-slate-800 mb-2">Secondary Feeds</div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {% for key,label in secondary_feeds %}
+        {% set stat = stats.get(label, {}) %}
+        {% set ok = stat.count and stat.count > 0 %}
+        {% set status_entry = last_errors.get(key) or {} %}
+        {% set err = status_entry.get('error') %}
+        {% set status_text = 'OK' if ok else (err or 'Never fetched / no data yet') %}
+        {% set last_checked = status_entry.get('checked_at') %}
+        {% set progress = status_entry.get('progress') %}
+        {% set p = 0 %}
+        {% if progress is not none %}
+            {% set p = progress %}
+            {% if p < 0 %}{% set p = 0 %}{% endif %}
+            {% if p > 100 %}{% set p = 100 %}{% endif %}
+        {% endif %}
+        {% set msg = status_entry.get('message') %}
+        {% set last_run_val = stat.last_activity_fmt or stat.last_activity or stat.last_created_fmt or stat.last_created or '—' %}
+        {% set last_run_date = last_run_val.split(' ')[0] if last_run_val else '—' %}
+        {% set tile_bg = 'bg-green-50 border-green-200' if ok else ('bg-red-50 border-red-200' if err else 'bg-amber-50 border-amber-200') %}
+        <div class="border rounded p-4 flex flex-col gap-3 {{ tile_bg }} feed-tile cursor-pointer" data-feed="{{ key }}">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <div class="text-sm font-semibold text-slate-800">
+                        {% if key == 'nvd' %}
+                            National Vulnerability Database (NVD)
+                            <div class="text-xs text-slate-600">Published by NIST</div>
+                        {% elif key == 'acsc' %}
+                            Australian Cyber Security Centre (ACSC)
+                            <div class="text-xs text-slate-600">Published by ACSC</div>
+                        {% elif key == 'cisa' %}
+                            CISA Known Exploited Vulnerabilities
+                            <div class="text-xs text-slate-600">Published by CISA</div>
+                        {% elif key == 'msrc' %}
+                            Microsoft Security Response Center (MSRC)
+                            <div class="text-xs text-slate-600">Published by Microsoft</div>
+                        {% else %}
+                            {{ feed_labels.get(key, label) }}
+                        {% endif %}
+                    </div>
+                    <div class="text-xs text-slate-600 flex flex-wrap gap-3">
+                        <span>Last check: {{ last_checked or '—' }}</span>
+                        <span>Last run: {{ last_run_date }}</span>
+                    </div>
+                    <div class="text-xs text-slate-600">Total ingested: {{ stat.count or 0 }}</div>
+                    <div class="text-xs text-slate-700" data-status-text="{{ key }}">Status: {{ msg or '—' }}</div>
+                    <div class="text-xs text-red-700 font-semibold {% if not err %}hidden{% endif %}" data-status-error="{{ key }}">Last error: {{ err }}</div>
+                    {% if not err and not ok %}
+                    <div class="text-xs text-amber-700 font-semibold">Reason: Never fetched / no data ingested yet.</div>
+                    {% endif %}
+                    <div class="mt-2 {% if progress is none %}hidden{% endif %}" data-progress-container="{{ key }}">
+                        <div class="h-2 bg-slate-200 rounded-full overflow-hidden">
+                            <div class="h-2 bg-blue-500" data-progress-bar="{{ key }}" style="width: {{ p }}%"></div>
+                        </div>
+                        <div class="text-[11px] text-slate-600 mt-0.5" data-progress-text="{{ key }}">{{ p }}% complete</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+            </div>
+        </div>
     </div>
 
-    <div class="bg-slate-50 border border-slate-100 rounded p-3 text-sm overflow-x-auto relative" data-widget-id="admin-threats-summary">
-        <div class="text-sm font-semibold text-slate-800 mb-2">Ingestion Summary</div>
-        <div class="tbl-header text-sm grid grid-cols-[2.1fr,1.2fr,0.55fr,0.55fr,0.55fr,0.55fr] gap-1.5 font-semibold text-slate-700 min-w-[780px] items-center">
+    <div class="bg-slate-50 border border-slate-100 rounded p-3 text-sm space-y-3">
+        <div class="text-sm font-semibold text-slate-800" id="selectedFeedLabel">Select a feed tile above</div>
+        <form method="POST" class="flex flex-col gap-2">
+            <input type="hidden" name="source" id="selectedFeedInput">
+            <div class="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-end">
+                <button id="btnCheck" formaction="/admin/threats/check/" formmethod="POST" class="bg-slate-200 text-slate-800 px-3 py-2 rounded text-sm disabled:opacity-50" disabled>Check</button>
+                <button id="btnFetch" formaction="/admin/threats/fetch/" formmethod="POST" class="bg-blue-600 text-white px-3 py-2 rounded text-sm disabled:opacity-50" disabled>Fetch</button>
+                <button id="btnStop" formaction="/admin/threats/stop/" formmethod="POST" class="bg-amber-100 text-amber-800 px-3 py-2 rounded text-sm border border-amber-200 disabled:opacity-50" onclick="return confirm('Stop the in-progress ingest?');" disabled>Stop</button>
+                <button id="btnDelete" formaction="/admin/threats/delete/" formmethod="POST" class="bg-red-100 text-red-800 px-3 py-2 rounded text-sm border border-red-200 disabled:opacity-50" onclick="return confirm('Delete all threats for selected feed?');" disabled>Delete</button>
+                <button id="btnRollback" formaction="/admin/threats/rollback/" formmethod="POST" class="bg-slate-100 text-slate-800 px-3 py-2 rounded text-sm border border-slate-200 disabled:opacity-50" onclick="return confirm('Rollback last ingest (deletes inserted rows) for this feed?');" disabled>Rollback last ingest</button>
+            </div>
+            <div id="nvdFiltersFields" class="hidden w-full">
+                <div class="flex flex-col sm:flex-row gap-2 sm:items-end">
+                    <div class="flex flex-col">
+                        <label class="text-xs text-slate-600">Days window</label>
+                        <input type="number" name="nvd_days" min="1" class="border rounded px-2 py-1 text-sm" value="{{ nvd_config.days if nvd_config else 10 }}">
+                    </div>
+                    <div class="flex flex-col flex-1">
+                        <label class="text-xs text-slate-600">Fallback keywords (comma separated)</label>
+                        <input type="text" name="nvd_keywords" class="border rounded px-2 py-1 text-sm" value="{{ nvd_config.keywords|join(', ') if nvd_config else 'Windows, Cisco, VMware, Fortinet, Linux' }}">
+                    </div>
+                    <div>
+                        <button formaction="/admin/threats/nvd_filters" formmethod="POST" class="bg-slate-200 text-slate-800 px-3 py-2 rounded text-sm border border-slate-200">Save</button>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+
+        <div class="bg-slate-50 border border-slate-100 rounded p-3 text-sm overflow-x-auto relative" data-widget-id="admin-threats-summary">
+            <div class="text-sm font-semibold text-slate-800 mb-2">Ingestion Summary</div>
+        <div class="tbl-header text-sm grid grid-cols-[1.5fr,0.6fr,0.55fr,0.55fr,0.75fr,0.45fr,0.45fr,0.45fr,0.45fr] gap-0.5 font-semibold text-slate-700 min-w-[760px] items-center">
             <div class="text-left pl-1">Feed</div>
-            <div class="text-center">Last run</div>
+            <div class="text-center">Type</div>
+            <div class="text-center">New</div>
+            <div class="text-center">Updated</div>
+            <div class="text-center">Last</div>
             <div class="text-center">Today</div>
             <div class="text-center">Week</div>
             <div class="text-center">Month</div>
             <div class="text-center">Total</div>
         </div>
         <div class="mt-2 space-y-1">
-            {% for key,label in [('cisa','CISA-KEV'),('acsc','ACSC'),('msrc','MSRC'),('nvd','NVD')] %}
+            {% for key,label in [('acsc','ACSC'),('nvd','NVD'),('cisa','CISA-KEV'),('msrc','MSRC'),('apple','APPLE')] %}
             {% set stat = stats.get(label, {}) %}
-            {% set last_run = stat.last_created_fmt or stat.last_created or '—' %}
-            {% set status_entry = last_errors.get(key) or {} %}
-            {% set has_data = stat.count and stat.count > 0 %}
-            {% set err = status_entry.get('error') %}
-            {% set row_class = 'bg-white' %}
-            {% if err %}
-                {% set row_class = 'bg-red-50' %}
-            {% elif has_data %}
-                {% set row_class = 'bg-green-50' %}
+            {% if stat.count %}
+            {% set last_run_val = stat.last_activity_fmt or stat.last_activity or stat.last_created_fmt or stat.last_created or '—' %}
+                {% set last_run = last_run_val.split(' ')[0] if last_run_val else '—' %}
+                {% set status_entry = last_errors.get(key) or {} %}
+                {% set has_data = stat.count and stat.count > 0 %}
+                {% set err = status_entry.get('error') %}
+                {% set row_class = 'bg-white' %}
+                {% if err %}
+                    {% set row_class = 'bg-red-50' %}
+                {% elif has_data %}
+                    {% set row_class = 'bg-green-50' %}
+                {% endif %}
+                {% set rec = recent_counts.get(label, {}) if recent_counts else {} %}
+                <div class="tbl-row text-sm grid grid-cols-[1.5fr,0.6fr,0.55fr,0.55fr,0.75fr,0.45fr,0.45fr,0.45fr,0.45fr] gap-0.5 items-center text-slate-700 min-w-[760px] border border-slate-100 rounded px-2 py-2 {% if loop.index0 % 2 == 1 %}tbl-row-alt{% endif %} {{ row_class }}">
+                    <div class="text-left pl-1 font-medium">{{ feed_labels.get(key, label) }}</div>
+                    <div class="text-center">
+                        {% set role = feed_roles.get(key) if feed_roles else None %}
+                        {% if role %}
+                            <span class="text-[10px] px-1.5 py-0.5 rounded-full {% if role=='Primary' %}bg-emerald-50 text-emerald-800 border border-emerald-200{% else %}bg-slate-50 text-slate-700 border border-slate-200{% endif %}">{{ role }}</span>
+                        {% else %}
+                            —
+                        {% endif %}
+                    </div>
+                    <div class="text-center">{{ rec.new or 0 }}</div>
+                    <div class="text-center">{{ rec.updated or 0 }}</div>
+                    <div class="whitespace-nowrap text-center">{{ last_run }}</div>
+                    <div class="text-center">{{ stat.today or 0 }}</div>
+                    <div class="text-center">{{ (stat.week or 0) }}</div>
+                    <div class="text-center">{{ (stat.month or 0) }}</div>
+                    <div class="text-center">{{ stat.count or 0 }}</div>
+                </div>
             {% endif %}
-            <div class="tbl-row text-sm grid grid-cols-[2.1fr,1.2fr,0.55fr,0.55fr,0.55fr,0.55fr] gap-1.5 items-center text-slate-700 min-w-[780px] border border-slate-100 rounded px-3 py-2 {% if loop.index0 % 2 == 1 %}tbl-row-alt{% endif %} {{ row_class }}">
-                <div class="text-left pl-1 font-medium">{{ feed_labels.get(key, label) }}</div>
-                <div class="whitespace-nowrap text-center">{{ last_run }}</div>
-                <div class="text-center">{{ stat.today or 0 }}</div>
-                <div class="text-center">{{ (stat.week or 0) }}</div>
-                <div class="text-center">{{ (stat.month or 0) }}</div>
-                <div class="text-center">{{ stat.count or 0 }}</div>
-            </div>
             {% endfor %}
         </div>
     </div>
+
+    {% if source %}
+    <div class="bg-slate-50 border border-slate-100 rounded p-3 text-sm space-y-2">
+        <div class="text-sm font-semibold text-slate-800">Ingest History ({{ (source or '').upper() }})</div>
+        {% if ingest_history %}
+        <div class="tbl-header text-sm grid grid-cols-[0.9fr,0.9fr,0.6fr,0.6fr,0.7fr,2.5fr] gap-1 items-center min-w-[740px]">
+            <div class="text-center">Started</div>
+            <div class="text-center">Finished</div>
+            <div class="text-center">Inserted</div>
+            <div class="text-center">Updated</div>
+            <div class="text-center">Status</div>
+            <div class="text-center">Message / Config</div>
+        </div>
+        <div class="space-y-1">
+        {% for run in ingest_history %}
+            <div class="tbl-row text-sm grid grid-cols-[0.9fr,0.9fr,0.6fr,0.6fr,0.7fr,2.5fr] gap-1 items-center min-w-[740px] border border-slate-100 rounded px-2 py-2 {% if loop.index0 % 2 == 1 %}tbl-row-alt{% endif %}">
+                <div class="text-slate-700 whitespace-nowrap flex flex-col leading-tight text-center">
+                    <span>{{ run.started_date or run.started_at or '—' }}</span>
+                    <span class="text-[11px] text-slate-500">{{ run.started_time or '' }}</span>
+                </div>
+                <div class="text-slate-700 whitespace-nowrap flex flex-col leading-tight text-center">
+                    <span>{{ run.finished_date or run.finished_at or '—' }}</span>
+                    <span class="text-[11px] text-slate-500">{{ run.finished_time or '' }}</span>
+                </div>
+                <div class="text-center text-slate-700">{{ run.inserted or 0 }}</div>
+                <div class="text-center text-slate-700">{{ run.updated or 0 }}</div>
+                <div class="text-center">
+                    <span class="text-[11px] px-1.5 py-0.5 rounded-full {% if run.status=='completed' %}bg-emerald-50 text-emerald-800 border border-emerald-200{% elif run.status=='failed' %}bg-red-50 text-red-800 border border-red-200{% elif run.status=='rolled_back' %}bg-amber-50 text-amber-800 border border-amber-200{% else %}bg-slate-50 text-slate-700 border border-slate-200{% endif %}">
+                        {{ run.status or '—' }}
+                    </span>
+                </div>
+                <div class="text-slate-700 text-sm">
+                    {{ run.message or '—' }}
+                </div>
+            </div>
+        {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-xs text-slate-600">No ingest history yet for {{ (source or '').upper() }}.</div>
+        {% endif %}
+    </div>
+    {% endif %}
 
     <div class="bg-slate-50 border border-slate-100 rounded p-3 text-sm space-y-3" data-widget-id="admin-threats-list">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
                 <div class="text-sm font-semibold text-slate-800">Threat Listing</div>
             </div>
-            <form method="GET" class="flex flex-col sm:flex-row gap-2 sm:items-center">
-                <div class="flex items-center gap-2">
-                    <label class="text-sm text-slate-700">Source</label>
-                    <select name="source" class="border rounded px-2 py-1 text-sm">
-                        <option value="none" {% if not source or source=='none' %}selected{% endif %}>None</option>
-                        <option value="all" {% if source=='all' %}selected{% endif %}>All</option>
-                        {% for s in sources %}
-                            <option value="{{ s }}" {% if source==s %}selected{% endif %}>{{ s }}</option>
-                        {% endfor %}
-                    </select>
+            <form method="GET" class="flex flex-col gap-2">
+                <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <div class="flex items-center gap-2">
+                        <label class="text-sm text-slate-700">Source</label>
+                        <select name="source" class="border rounded px-2 py-1 text-sm">
+                            <option value="">All sources</option>
+                            {% for key,label in feed_labels.items() %}
+                                <option value="{{ key }}" {% if source==key %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="text-sm text-slate-700">Severity</label>
+                        <select name="severity" class="border rounded px-2 py-1 text-sm">
+                            <option value="all" {% if not severity or severity=='all' %}selected{% endif %}>All</option>
+                            <option value="Critical" {% if severity=='Critical' %}selected{% endif %}>Critical</option>
+                            <option value="High" {% if severity=='High' %}selected{% endif %}>High</option>
+                            <option value="Medium" {% if severity=='Medium' %}selected{% endif %}>Medium</option>
+                            <option value="Low" {% if severity=='Low' %}selected{% endif %}>Low</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="text-sm text-slate-700">KEV</label>
+                        <select name="kev_flag" class="border rounded px-2 py-1 text-sm">
+                            <option value="" {% if not kev_filter %}selected{% endif %}>All</option>
+                            <option value="yes" {% if kev_filter=='yes' %}selected{% endif %}>KEV only</option>
+                            <option value="no" {% if kev_filter=='no' %}selected{% endif %}>Non-KEV</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="text-sm text-slate-700">Date</label>
+                        <select name="date_range" class="border rounded px-2 py-1 text-sm">
+                            <option value="" {% if not date_range %}selected{% endif %}>All time</option>
+                            <option value="today" {% if date_range=='today' %}selected{% endif %}>Today</option>
+                            <option value="week" {% if date_range=='week' %}selected{% endif %}>This week</option>
+                            <option value="month" {% if date_range=='month' %}selected{% endif %}>This month</option>
+                        </select>
+                    </div>
                 </div>
-                <div class="flex items-center gap-2">
-                    <label class="text-sm text-slate-700">Severity</label>
-                    <select name="severity" class="border rounded px-2 py-1 text-sm">
-                        <option value="all" {% if not severity or severity=='all' %}selected{% endif %}>All</option>
-                        <option value="Critical" {% if severity=='Critical' %}selected{% endif %}>Critical</option>
-                        <option value="High" {% if severity=='High' %}selected{% endif %}>High</option>
-                        <option value="Medium" {% if severity=='Medium' %}selected{% endif %}>Medium</option>
-                        <option value="Low" {% if severity=='Low' %}selected{% endif %}>Low</option>
-                    </select>
+                <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <div class="flex items-center gap-2 flex-1">
+                        <label class="text-sm text-slate-700">Search</label>
+                        <input type="text" name="q" value="{{ q }}" class="border rounded px-2 py-1 text-sm w-full" placeholder="title, summary, CVE">
+                    </div>
+                    <button class="bg-slate-100 border border-slate-200 px-3 py-2 rounded text-sm text-slate-700">Apply</button>
                 </div>
-                <div class="flex items-center gap-2">
-                    <label class="text-sm text-slate-700">Search</label>
-                    <input type="text" name="q" value="{{ q }}" class="border rounded px-2 py-1 text-sm" placeholder="title, summary, CVE">
-                </div>
-                <button class="bg-slate-100 border border-slate-200 px-3 py-2 rounded text-sm text-slate-700">Apply</button>
             </form>
         </div>
 
         <div class="bg-white border border-slate-100 rounded p-3 overflow-x-auto">
-        <div class="tbl-header text-sm grid grid-cols-[3.2fr,0.8fr,0.8fr,0.65fr,0.65fr,0.7fr] gap-1.5 items-center min-w-[780px]">
+        <div class="tbl-header text-sm grid grid-cols-[2.8fr,1fr,0.9fr,0.8fr,0.8fr,0.8fr,0.8fr] gap-1 items-center">
             <div class="text-left pl-1">Title</div>
+            <div class="text-left pl-1 whitespace-nowrap">Product Family</div>
             <div class="text-left pl-1 whitespace-nowrap">CVE</div>
             <div class="text-center">Source</div>
             <div class="text-center">Type</div>
@@ -143,7 +331,7 @@
             <div class="text-center whitespace-nowrap">Published</div>
         </div>
         <div class="space-y-2 mt-2">
-            {% if threats and (source and source!='none') %}
+            {% if threats %}
                 {% for t in threats %}
                     {% set sev = (t.severity or '')|lower %}
                     {% set sev_class = 'text-slate-700' %}
@@ -162,8 +350,24 @@
                         {% set sev_class = 'text-green-800 font-semibold' %}
                         {% set row_bg = 'bg-green-100' %}
                     {% endif %}
-                    <div class="tbl-row text-sm grid grid-cols-[3.2fr,0.8fr,0.8fr,0.65fr,0.65fr,0.7fr] gap-1.5 items-center px-3 py-2 rounded {% if loop.index0 % 2 == 1 %}tbl-row-alt{% endif %} {{ row_bg }} border border-slate-100 min-w-[780px]">
-                        <div class="text-blue-700 truncate pl-1"><a href="/admin/threats/{{ t.id }}?source={{ source }}&q={{ q }}&severity={{ severity }}&page={{ pagination.page }}" class="hover:underline">{{ row_title }}</a></div>
+                    <div class="tbl-row text-sm grid grid-cols-[2.8fr,1fr,0.9fr,0.8fr,0.8fr,0.8fr,0.8fr] gap-1 items-center px-3 py-2 rounded {% if loop.index0 % 2 == 1 %}tbl-row-alt{% endif %} {{ row_bg }} border border-slate-100">
+                        <div class="text-blue-700 truncate pl-1 flex flex-col gap-0.5">
+                            <div class="flex items-center gap-2">
+                                <a href="/admin/threats/{{ t.id }}?source={{ source }}&q={{ q }}&severity={{ severity }}&page={{ pagination.page }}" class="hover:underline">{{ row_title }}</a>
+                                <div class="flex items-center gap-1">
+                                    {% if t.badge_new %}
+                                        <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">New</span>
+                                    {% endif %}
+                                    {% if t.badge_enriched %}
+                                        <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-200">Enriched</span>
+                                    {% endif %}
+                                    {% if t.badge_updated and not t.badge_enriched %}
+                                        <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">Updated</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="text-slate-700 whitespace-nowrap pl-1 truncate">{{ t.nvd_product_family or t.products_text or "—" }}</div>
                         <div class="text-slate-700 whitespace-nowrap pl-1">{{ t.cve_id or "—" }}</div>
                         <div class="text-slate-700 text-center">{{ t.source }}</div>
                         <div class="text-slate-700 text-center">{{ t.item_type }}</div>
@@ -175,7 +379,7 @@
                 <div class="tbl-empty text-sm">No threats loaded. Select a source or search, then Apply.</div>
             {% endif %}
         </div>
-        {% if threats and (source and source!='none') %}
+        {% if threats %}
         {% set pg = pagination %}
         <div class="flex items-center justify-between mt-3 text-xs text-slate-700">
             <div>Page {{ pg.page }} of {{ pg.total_pages }} ({{ pg.per_page }} per page)</div>
@@ -184,6 +388,8 @@
                     <input type="hidden" name="source" value="{{ source }}">
                     <input type="hidden" name="q" value="{{ q }}">
                     <input type="hidden" name="severity" value="{{ severity }}">
+                    <input type="hidden" name="kev_flag" value="{{ kev_filter }}">
+                    <input type="hidden" name="date_range" value="{{ date_range }}">
                     <input type="hidden" name="page" value="{{ pg.page-1 if pg.page>1 else 1 }}">
                     <button class="px-2 py-1 border rounded text-slate-700 {% if pg.page<=1 %}opacity-50 cursor-not-allowed{% endif %}" {% if pg.page<=1 %}disabled{% endif %}>Prev</button>
                 </form>
@@ -191,6 +397,8 @@
                     <input type="hidden" name="source" value="{{ source }}">
                     <input type="hidden" name="q" value="{{ q }}">
                     <input type="hidden" name="severity" value="{{ severity }}">
+                    <input type="hidden" name="kev_flag" value="{{ kev_filter }}">
+                    <input type="hidden" name="date_range" value="{{ date_range }}">
                     <input type="hidden" name="page" value="{{ pg.page+1 if pg.page<pg.total_pages else pg.total_pages }}">
                     <button class="px-2 py-1 border rounded text-slate-700 {% if pg.page>=pg.total_pages %}opacity-50 cursor-not-allowed{% endif %}" {% if pg.page>=pg.total_pages %}disabled{% endif %}>Next</button>
                 </form>
@@ -198,6 +406,78 @@
         </div>
         {% endif %}
         </div>
-    </div>
 </div>
+</div>
+<script>
+(function() {
+const tiles = Array.from(document.querySelectorAll('.feed-tile'));
+const input = document.getElementById('selectedFeedInput');
+const label = document.getElementById('selectedFeedLabel');
+const buttons = [document.getElementById('btnCheck'), document.getElementById('btnFetch'), document.getElementById('btnStop'), document.getElementById('btnDelete'), document.getElementById('btnRollback')];
+const nvdFields = document.getElementById('nvdFiltersFields');
+let selected = null;
+    function clearSelection() {
+        tiles.forEach(t => t.classList.remove('ring-2','ring-blue-500'));
+    }
+    tiles.forEach(tile => {
+        tile.addEventListener('click', () => {
+            selected = tile.dataset.feed;
+            clearSelection();
+            tile.classList.add('ring-2','ring-blue-500');
+            if (input) input.value = selected;
+            if (label) label.textContent = `Selected: ${tile.querySelector('.text-sm.font-semibold')?.textContent?.trim() || selected}`;
+            buttons.forEach(b => { if (b) b.disabled = false; });
+            if (nvdFields) {
+                if (selected === 'nvd') {
+                    nvdFields.classList.remove('hidden');
+                } else {
+                    nvdFields.classList.add('hidden');
+                }
+            }
+        });
+    });
+
+    // Poll progress without page refresh
+    function updateProgress() {
+        fetch('/admin/threats/status')
+            .then(resp => resp.json())
+            .then(data => {
+                Object.entries(data || {}).forEach(([feed, val]) => {
+                    const pct = val && val.progress !== undefined && val.progress !== null ? Number(val.progress) : null;
+                    const bar = document.querySelector(`[data-progress-bar="${feed}"]`);
+                    const txt = document.querySelector(`[data-progress-text="${feed}"]`);
+                    const container = document.querySelector(`[data-progress-container="${feed}"]`);
+                    const statusText = document.querySelector(`[data-status-text="${feed}"]`);
+                    const statusErr = document.querySelector(`[data-status-error="${feed}"]`);
+                    if (pct === null || isNaN(pct)) {
+                        if (container) container.classList.add('hidden');
+                    } else {
+                        const clamped = Math.max(0, Math.min(100, pct));
+                        if (bar) bar.style.width = `${clamped}%`;
+                        if (txt) txt.textContent = `${clamped}% complete`;
+                        if (container) container.classList.remove('hidden');
+                    }
+                    if (statusText) {
+                        const msg = val && val.message ? val.message : '—';
+                        statusText.textContent = `Status: ${msg}`;
+                    }
+                    if (statusErr) {
+                        const err = val && val.error ? val.error : '';
+                        if (err) {
+                            statusErr.textContent = `Last error: ${err}`;
+                            statusErr.classList.remove('hidden');
+                        } else {
+                            statusErr.classList.add('hidden');
+                            statusErr.textContent = '';
+                        }
+                    }
+                });
+            })
+            .catch(() => {});
+    }
+    updateProgress();
+    setInterval(updateProgress, 5000);
+
+})();
+</script>
 {% endblock %}

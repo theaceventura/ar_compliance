@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -9,9 +10,45 @@ DB_NAME = str(Path(__file__).resolve().parents[2] / "compliance.db")
 
 def get_connection():
     """Open a SQLite connection to the compliance database."""
-    conn = sqlite3.connect(DB_NAME)
+    # Add a generous timeout and WAL to reduce "database is locked" errors
+    conn = sqlite3.connect(DB_NAME, timeout=30.0)
+    try:
+        conn.execute("PRAGMA busy_timeout=30000")
+        conn.execute("PRAGMA journal_mode=WAL")
+    except Exception:
+        pass
     conn.row_factory = sqlite3.Row
     return conn
+
+def ensure_indexes():
+    """Create helpful indexes if they do not exist (best-effort).
+
+    Returns a dict with status and timestamp for logging.
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+    ts = datetime.utcnow().isoformat()
+    status = "ok"
+    try:
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_threat_cve_id ON threat_objects(cve_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_threat_contrib_sources ON threat_objects(contrib_sources)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_threat_source ON threat_objects(source)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_threat_source_sev_pub ON threat_objects(source, severity, published_at)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_threat_published ON threat_objects(published_at)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_threat_updated ON threat_objects(updated_at)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_threat_ingest_id ON threat_objects(ingest_id)")
+        cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_threat_cve_id ON threat_objects(cve_id) WHERE cve_id IS NOT NULL")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_history_cve ON cve_history(cve_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_history_created_at ON cve_history(created_at)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_ingest_runs_source ON ingest_runs(source)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_ingest_runs_started ON ingest_runs(started_at)")
+        conn.commit()
+        status = "created/exists"
+    except Exception as exc:
+        status = f"error: {exc}"
+    finally:
+        conn.close()
+    return {"status": status, "checked_at": ts}
 
 # Check if a column exists in a table (used for lightweight migrations)
 def _column_exists(cur, table, column):
@@ -72,11 +109,32 @@ def _create_base_tables(cur):
             summary TEXT,
             link TEXT,
             published_at TEXT,
+            last_modified_at TEXT,
             severity TEXT,
+            cvss_version TEXT,
+            cvss_vector TEXT,
+            cvss_base_score REAL,
+            cvss_av TEXT,
+            cvss_ac TEXT,
+            cvss_pr TEXT,
+            cvss_ui TEXT,
+            cvss_s TEXT,
+            cvss_c TEXT,
+            cvss_i TEXT,
+            cvss_a TEXT,
             kev_flag INTEGER DEFAULT 0,
+            exploit_status TEXT,
             products_text TEXT,
+            vendor_refs TEXT,
             raw_payload TEXT,
-            created_at TEXT
+            created_at TEXT,
+            updated_at TEXT,
+            is_enriched INTEGER DEFAULT 0,
+            enriched_at TEXT,
+            cwe_id TEXT,
+            nvd_product_family TEXT,
+            contrib_sources TEXT,
+            ingest_id INTEGER
         )
     """)
     cur.execute("""
@@ -146,6 +204,29 @@ def _run_migrations(cur):
         ("threat_objects", "products_text", "ALTER TABLE threat_objects ADD COLUMN products_text TEXT"),
         ("threat_objects", "raw_payload", "ALTER TABLE threat_objects ADD COLUMN raw_payload TEXT"),
         ("threat_objects", "created_at", "ALTER TABLE threat_objects ADD COLUMN created_at TEXT"),
+        ("threat_objects", "updated_at", "ALTER TABLE threat_objects ADD COLUMN updated_at TEXT"),
+        ("threat_objects", "is_enriched", "ALTER TABLE threat_objects ADD COLUMN is_enriched INTEGER DEFAULT 0"),
+        ("threat_objects", "enriched_at", "ALTER TABLE threat_objects ADD COLUMN enriched_at TEXT"),
+        ("threat_objects", "cvss_vector", "ALTER TABLE threat_objects ADD COLUMN cvss_vector TEXT"),
+        ("threat_objects", "cvss_base_score", "ALTER TABLE threat_objects ADD COLUMN cvss_base_score REAL"),
+        ("threat_objects", "cvss_version", "ALTER TABLE threat_objects ADD COLUMN cvss_version TEXT"),
+        ("threat_objects", "cvss_av", "ALTER TABLE threat_objects ADD COLUMN cvss_av TEXT"),
+        ("threat_objects", "cvss_ac", "ALTER TABLE threat_objects ADD COLUMN cvss_ac TEXT"),
+        ("threat_objects", "cvss_pr", "ALTER TABLE threat_objects ADD COLUMN cvss_pr TEXT"),
+        ("threat_objects", "cvss_ui", "ALTER TABLE threat_objects ADD COLUMN cvss_ui TEXT"),
+        ("threat_objects", "cvss_s", "ALTER TABLE threat_objects ADD COLUMN cvss_s TEXT"),
+        ("threat_objects", "cvss_c", "ALTER TABLE threat_objects ADD COLUMN cvss_c TEXT"),
+        ("threat_objects", "cvss_i", "ALTER TABLE threat_objects ADD COLUMN cvss_i TEXT"),
+        ("threat_objects", "cvss_a", "ALTER TABLE threat_objects ADD COLUMN cvss_a TEXT"),
+        ("threat_objects", "last_modified_at", "ALTER TABLE threat_objects ADD COLUMN last_modified_at TEXT"),
+        ("threat_objects", "exploit_status", "ALTER TABLE threat_objects ADD COLUMN exploit_status TEXT"),
+        ("threat_objects", "vendor_refs", "ALTER TABLE threat_objects ADD COLUMN vendor_refs TEXT"),
+        ("threat_objects", "cwe_id", "ALTER TABLE threat_objects ADD COLUMN cwe_id TEXT"),
+        ("threat_objects", "cvss_vector", "ALTER TABLE threat_objects ADD COLUMN cvss_vector TEXT"),
+        ("threat_objects", "cvss_base_score", "ALTER TABLE threat_objects ADD COLUMN cvss_base_score REAL"),
+        ("threat_objects", "nvd_product_family", "ALTER TABLE threat_objects ADD COLUMN nvd_product_family TEXT"),
+        ("threat_objects", "contrib_sources", "ALTER TABLE threat_objects ADD COLUMN contrib_sources TEXT"),
+        ("threat_objects", "ingest_id", "ALTER TABLE threat_objects ADD COLUMN ingest_id INTEGER"),
     ]
 
     for item in migrations:
@@ -155,6 +236,51 @@ def _run_migrations(cur):
             # optional follow-up SQL provided as 4th element
             if len(item) > 3:
                 cur.execute(item[3])
+
+    # CVE history table
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS cve_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cve_id TEXT,
+            source TEXT,
+            action TEXT,
+            changed_fields TEXT,
+            raw_payload TEXT,
+            created_at TEXT
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ingest_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source TEXT,
+            started_at TEXT,
+            finished_at TEXT,
+            status TEXT,
+            message TEXT,
+            inserted INTEGER,
+            updated INTEGER,
+            config_snapshot TEXT
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ingest_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source TEXT,
+            started_at TEXT,
+            finished_at TEXT,
+            status TEXT,
+            message TEXT,
+            inserted INTEGER,
+            updated INTEGER,
+            config_snapshot TEXT
+        )
+        """
+    )
 
 
 def _ensure_app_settings(cur):
@@ -674,8 +800,8 @@ def admin_update_chart_palettes(severity_palette, impact_palette, completion_pal
     conn.close()
 
 # Threat queries
-def admin_list_threats(source=None, q=None, severity=None):
-    """Return a list of threat_objects filtered by source, severity, and optional search term."""
+def admin_list_threats(source=None, q=None, severity=None, kev_filter=None):
+    """Return a list of threat_objects filtered by source, severity, kev_flag, and optional search term."""
     conn = get_connection()
     cur = conn.cursor()
     base = "SELECT * FROM threat_objects WHERE 1=1"
@@ -686,6 +812,11 @@ def admin_list_threats(source=None, q=None, severity=None):
     if severity:
         base += " AND LOWER(severity)=LOWER(?)"
         params.append(severity)
+    if kev_filter:
+        if kev_filter == "yes":
+            base += " AND kev_flag=1"
+        elif kev_filter == "no":
+            base += " AND (kev_flag IS NULL OR kev_flag=0)"
     if q:
         like = f"%{q}%"
         base += " AND (title LIKE ? OR summary LIKE ? OR cve_id LIKE ?)"
@@ -737,7 +868,10 @@ def admin_threat_summary(sources):
         # overall count and last created
         cur.execute(
             """
-            SELECT COUNT(*) as cnt, MAX(created_at) as last_created
+            SELECT
+                COUNT(*) as cnt,
+                MAX(created_at) as last_created,
+                MAX(COALESCE(updated_at, created_at)) as last_activity
             FROM threat_objects WHERE source=?
             """,
             (src,),
@@ -746,13 +880,14 @@ def admin_threat_summary(sources):
         row = dict(row) if row else {}
         total = row.get("cnt") or 0
         last_created = row.get("last_created")
+        last_activity = row.get("last_activity")
         # buckets
         cur.execute(
             """
             SELECT
-                SUM(created_at >= ?) AS today_cnt,
-                SUM(created_at >= ?) AS week_cnt,
-                SUM(created_at >= ?) AS month_cnt
+                SUM(COALESCE(updated_at, created_at) >= ?) AS today_cnt,
+                SUM(COALESCE(updated_at, created_at) >= ?) AS week_cnt,
+                SUM(COALESCE(updated_at, created_at) >= ?) AS month_cnt
             FROM threat_objects
             WHERE source=?
             """,
@@ -768,12 +903,182 @@ def admin_threat_summary(sources):
         summary[src] = {
             "count": total,
             "last_created": last_created,
+            "last_activity": last_activity,
             "today": buckets.get("today_cnt") or 0,
             "week": buckets.get("week_cnt") or 0,
             "month": buckets.get("month_cnt") or 0,
         }
     conn.close()
     return summary
+
+def admin_threat_recent_counts(sources, days=7):
+    """Return counts of new and updated threats per source within the last `days`."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff_iso = cutoff.isoformat()
+    out = {}
+    for src in sources:
+        cur.execute(
+            """
+            SELECT
+                SUM(created_at >= ?) AS new_cnt,
+                SUM(
+                    created_at IS NOT NULL
+                    AND updated_at IS NOT NULL
+                    AND updated_at > created_at
+                    AND updated_at >= ?
+                ) AS updated_cnt
+            FROM threat_objects
+            WHERE source=?
+            """,
+            (cutoff_iso, cutoff_iso, src),
+        )
+        row = cur.fetchone()
+        row = dict(row) if row else {}
+        out[src] = {
+            "new": row.get("new_cnt") or 0,
+            "updated": row.get("updated_cnt") or 0,
+        }
+    conn.close()
+    return out
+
+
+# Ingest run helpers
+def start_ingest_run(source, status="running", message=None, config_snapshot=None):
+    conn = get_connection()
+    cur = conn.cursor()
+    started = datetime.utcnow().isoformat()
+    cur.execute(
+        """
+        INSERT INTO ingest_runs (source, started_at, status, message, config_snapshot)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (source, started, status, message, json.dumps(config_snapshot) if config_snapshot is not None else None),
+    )
+    run_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return run_id
+
+
+def finish_ingest_run(run_id, status="completed", inserted=0, updated=0, message=None):
+    if not run_id:
+        return
+    conn = get_connection()
+    cur = conn.cursor()
+    finished = datetime.utcnow().isoformat()
+    cur.execute(
+        """
+        UPDATE ingest_runs
+        SET finished_at=?, status=?, inserted=?, updated=?, message=?
+        WHERE id=?
+        """,
+        (finished, status, inserted, updated, message, run_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_ingest_runs(source, limit=10):
+    """Return recent ingest_runs for a source."""
+    conn = get_connection()
+    cur = conn.cursor()
+    src = (source or "").upper()
+    cur.execute(
+        """
+        SELECT * FROM ingest_runs
+        WHERE UPPER(source)=?
+        ORDER BY datetime(started_at) DESC
+        LIMIT ?
+        """,
+        (src, limit),
+    )
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+def rollback_last_ingest(source):
+    """Delete rows created in the last ingest for this source (inserts only)."""
+    conn = get_connection()
+    cur = conn.cursor()
+    src = (source or "").upper()
+    cur.execute(
+        """
+        SELECT * FROM ingest_runs
+        WHERE UPPER(source)=?
+        ORDER BY datetime(started_at) DESC
+        LIMIT 1
+        """,
+        (src,),
+    )
+    run = cur.fetchone()
+    if not run:
+        conn.close()
+        return 0, None
+    run_id = run["id"]
+    # Only delete rows that were inserted in that ingest (updated_at == created_at)
+    cur.execute(
+        """
+        DELETE FROM threat_objects
+        WHERE ingest_id=? AND (updated_at IS NULL OR updated_at = created_at)
+        """,
+        (run_id,),
+    )
+    deleted = cur.rowcount
+    cur.execute(
+        """
+        UPDATE ingest_runs
+        SET finished_at=?, status=?, message=?
+        WHERE id=?
+        """,
+        (
+            datetime.utcnow().isoformat(),
+            "rolled_back",
+            f"Rolled back {deleted} inserted rows",
+            run_id,
+        ),
+    )
+    conn.commit()
+    conn.close()
+    return deleted, dict(run)
+
+
+# Ingest run helpers
+def start_ingest_run(source, status="running", message=None, config_snapshot=None):
+    conn = get_connection()
+    cur = conn.cursor()
+    started = datetime.utcnow().isoformat()
+    cur.execute(
+        """
+        INSERT INTO ingest_runs (source, started_at, status, message, config_snapshot)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (source, started, status, message, json.dumps(config_snapshot) if config_snapshot is not None else None),
+    )
+    run_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return run_id
+
+
+def finish_ingest_run(run_id, status="completed", inserted=0, updated=0, message=None):
+    if not run_id:
+        return
+    conn = get_connection()
+    cur = conn.cursor()
+    finished = datetime.utcnow().isoformat()
+    cur.execute(
+        """
+        UPDATE ingest_runs
+        SET finished_at=?, status=?, inserted=?, updated=?, message=?
+        WHERE id=?
+        """,
+        (finished, status, inserted, updated, message, run_id),
+    )
+    conn.commit()
+    conn.close()
 
 def admin_get_threat(threat_id):
     """Return a single threat_object by id."""
@@ -798,6 +1103,97 @@ def admin_delete_threats_by_source(source):
     conn.commit()
     conn.close()
     return count
+
+
+# Enrichment helpers
+def get_threats_by_source(source):
+    """Return all threat_objects for a given source as a list of dicts."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM threat_objects WHERE source=?", (source,))
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+def insert_cve_history(cve_id, source, action, changed_fields=None, raw_payload=None):
+    """Record a history entry for a CVE."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO cve_history (cve_id, source, action, changed_fields, raw_payload, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (cve_id, source, action, changed_fields, raw_payload, datetime.utcnow().isoformat()),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_cve_history(cve_id):
+    """Return history entries for a CVE ordered by newest first."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT * FROM cve_history
+        WHERE cve_id=?
+        ORDER BY created_at DESC
+        """,
+        (cve_id,),
+    )
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+def get_nvd_threat_by_cve(cve_id):
+    """Return the most recent NVD threat for a CVE, or None."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT * FROM threat_objects
+        WHERE source='NVD' AND cve_id=?
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (cve_id,),
+    )
+    row = cur.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def update_nvd_threat_for_enrichment(threat_id, *, kev_flag=None, merged_raw_payload=None, products_text=None):
+    """Update selected fields on an NVD threat for enrichment."""
+    sets = []
+    params = []
+    if kev_flag is not None:
+        sets.append("kev_flag=?")
+        params.append(1 if kev_flag else 0)
+    if merged_raw_payload is not None:
+        sets.append("raw_payload=?")
+        params.append(merged_raw_payload)
+    if products_text is not None:
+        sets.append("products_text=?")
+        params.append(products_text)
+    # mark enrichment
+    sets.append("is_enriched=?")
+    params.append(1)
+    sets.append("enriched_at=?")
+    params.append(datetime.utcnow().isoformat())
+    sets.append("updated_at=?")
+    params.append(datetime.utcnow().isoformat())
+    if not sets:
+        return
+    params.append(threat_id)
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(f"UPDATE threat_objects SET {', '.join(sets)} WHERE id=?", params)
+    conn.commit()
+    conn.close()
 
 
 # Palette helpers
