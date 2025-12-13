@@ -14,9 +14,9 @@ from flask import (
 )
 from werkzeug.security import generate_password_hash
 
-from compliance_app.compliance_app_tailwind import db, risk_utils
-from compliance_app.compliance_app_tailwind.auth_helpers import admin_required, company_admin_required, current_user
-from compliance_app.compliance_app_tailwind.core_utils import (
+from compliance_app import db, risk_utils
+from compliance_app.auth_helpers import admin_required, company_admin_required, current_user
+from compliance_app.core_utils import (
     format_completed_on,
     format_due_and_overdue,
     normalize_task_for_dashboard,

@@ -13,9 +13,9 @@ from flask import (
 )
 import requests
 
-from compliance_app.compliance_app_tailwind.auth_helpers import admin_required
-from compliance_app.compliance_app_tailwind import db
-from compliance_app.compliance_app_tailwind.threat import threat_ingestion
+from compliance_app.auth_helpers import admin_required
+from compliance_app import db
+from compliance_app.threat import threat_ingestion
 
 
 NOT_FOUND = "Not found"

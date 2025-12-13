@@ -556,7 +556,8 @@ let selected = null;
             .catch(() => {});
     }
     updateProgress();
-    setInterval(updateProgress, 5000);
+    // Poll every 10 minutes instead of every 5 seconds
+    setInterval(updateProgress, 10 * 60 * 1000);
 
 })();
 </script>

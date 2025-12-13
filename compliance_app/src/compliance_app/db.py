@@ -3,9 +3,9 @@ import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 
-# Anchor the database to the project root so it is consistent regardless of the
-# working directory (e.g., when running from an IDE).
-DB_NAME = str(Path(__file__).resolve().parents[2] / "compliance.db")
+# Anchor the database to the repo root so it is consistent regardless of the
+# working directory (e.g., when running from an IDE). parents[3] => repo root.
+DB_NAME = str(Path(__file__).resolve().parents[3] / "compliance.db")
 
 
 def get_connection():
@@ -44,7 +44,19 @@ def ensure_indexes():
         cur.execute("CREATE INDEX IF NOT EXISTS idx_ingest_runs_started ON ingest_runs(started_at)")
         cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_feed_entry_unique ON threat_feed_entries(cve_id, source)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_feed_entry_source ON threat_feed_entries(source)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_feed_entry_ingest ON threat_feed_entries(ingest_id)")
         cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_kev_cve ON cve_kev_enrichment(cve_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_kev_fetched ON cve_kev_enrichment(fetched_at)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_msrc_enrich_cve ON cve_msrc_enrichment(cve_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_msrc_enrich_seen ON cve_msrc_enrichment(last_seen_utc)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_users_company ON users(company_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_tasks_company ON tasks(company_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_tasks_due ON tasks(due_date)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_task_assign_user ON task_assignments(user_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_task_assign_company ON task_assignments(company_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_task_assign_task ON task_assignments(task_id)")
         conn.commit()
         status = "created/exists"
     except Exception as exc:
@@ -492,9 +504,9 @@ def create_tables_if_needed():
     _ensure_default_company_and_admin(cur)
     _seed_impact_severity_defaults(cur)
     _seed_threat_table_defaults(cur)
-
     conn.commit()
     conn.close()
+    ensure_indexes()
 
 # Threat ingestion helpers
 def _seed_threat_table_defaults(cur):

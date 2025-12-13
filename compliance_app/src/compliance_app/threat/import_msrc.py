@@ -12,7 +12,7 @@ from typing import Dict, List, Optional
 
 import requests
 
-from compliance_app.compliance_app_tailwind import db
+from compliance_app import db
 
 MSRC_SOURCE = "MSRC"
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"

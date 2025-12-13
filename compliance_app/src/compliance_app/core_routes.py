@@ -5,9 +5,9 @@ from datetime import date, datetime
 from flask import Blueprint, abort, flash, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash
 
-from compliance_app.compliance_app_tailwind import db
-from compliance_app.compliance_app_tailwind.auth_helpers import current_user, login_required
-from compliance_app.compliance_app_tailwind.core_utils import (
+from compliance_app import db
+from compliance_app.auth_helpers import current_user, login_required
+from compliance_app.core_utils import (
     format_due_and_overdue,
     format_completed_on,
     tally,
@@ -154,11 +154,11 @@ def dashboard():
     # Admins and company admins get the rich task dashboard from the main app module.
     if user["role"] == "admin":
         from importlib import import_module
-        app_module = import_module("compliance_app.compliance_app_tailwind.app")
+        app_module = import_module("compliance_app.app")
         return app_module._admin_view(user)
     if user["role"] == "company_admin" and request.args.get("view") != "personal":
         from importlib import import_module
-        app_module = import_module("compliance_app.compliance_app_tailwind.app")
+        app_module = import_module("compliance_app.app")
         return app_module._company_admin_view(user)
     return _personal_view(user)
 

@@ -20,27 +20,31 @@ import sys
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
-# Attempt to import the package-level DB module; if import fails (e.g. when running
-# the app directly), add the project root to sys.path and retry the import.
+SRC_DIR = Path(__file__).resolve().parents[1]
+# Ensure src/ is on sys.path so `import compliance_app` works when running directly.
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 try:
-    import compliance_app.compliance_app_tailwind.db as db
-    import compliance_app.compliance_app_tailwind.risk_utils as risk_utils
-    from compliance_app.compliance_app_tailwind.admin_routes import admin_bp
-    import compliance_app.compliance_app_tailwind.core_utils as core_utils
-    from compliance_app.compliance_app_tailwind.auth_helpers import (
+    import compliance_app.db as db
+    import compliance_app.risk_utils as risk_utils
+    from compliance_app.admin_routes import admin_bp
+    import compliance_app.core_utils as core_utils
+    from compliance_app.auth_helpers import (
         current_user,
         login_required,
         company_admin_required,
         admin_required,
     )
 except ImportError:
+    if str(SRC_DIR) not in sys.path:
+        sys.path.insert(0, str(SRC_DIR))
     if str(ROOT_DIR) not in sys.path:
         sys.path.insert(0, str(ROOT_DIR))
-    import compliance_app.compliance_app_tailwind.db as db
-    import compliance_app.compliance_app_tailwind.risk_utils as risk_utils
-    from compliance_app.compliance_app_tailwind.admin_routes import admin_bp
-    import compliance_app.compliance_app_tailwind.core_utils as core_utils
-    from compliance_app.compliance_app_tailwind.auth_helpers import (
+    import compliance_app.db as db
+    import compliance_app.risk_utils as risk_utils
+    from compliance_app.admin_routes import admin_bp
+    import compliance_app.core_utils as core_utils
+    from compliance_app.auth_helpers import (
         current_user,
         login_required,
         company_admin_required,
@@ -69,24 +73,24 @@ ENABLE_RISK_MODULE = os.getenv("APP_ENABLE_RISK_MODULE", "0") == "1"
 
 # Register blueprints
 try:
-    from compliance_app.compliance_app_tailwind.core_routes import core_bp
-    from compliance_app.compliance_app_tailwind.threat.threat_routes import threats_bp
+    from compliance_app.core_routes import core_bp
+    from compliance_app.threat.threat_routes import threats_bp
 except ImportError:
     if str(ROOT_DIR) not in sys.path:
         sys.path.insert(0, str(ROOT_DIR))
-    from compliance_app.compliance_app_tailwind.core_routes import core_bp
-    from compliance_app.compliance_app_tailwind.threat.threat_routes import threats_bp
+    from compliance_app.core_routes import core_bp
+    from compliance_app.threat.threat_routes import threats_bp
 app.register_blueprint(core_bp)
 app.register_blueprint(admin_bp)
 if ENABLE_THREAT_MODULE:
     app.register_blueprint(threats_bp)
 
 try:
-    from compliance_app.compliance_app_tailwind.risk_routes import risk_bp
+    from compliance_app.risk_routes import risk_bp
 except ImportError:
     if str(ROOT_DIR) not in sys.path:
         sys.path.insert(0, str(ROOT_DIR))
-    from compliance_app.compliance_app_tailwind.risk_routes import risk_bp
+    from compliance_app.risk_routes import risk_bp
 if ENABLE_RISK_MODULE:
     app.register_blueprint(risk_bp)
 

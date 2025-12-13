@@ -2,8 +2,8 @@
 
 from flask import Blueprint, render_template
 
-from compliance_app.compliance_app_tailwind import db
-from compliance_app.compliance_app_tailwind.auth_helpers import admin_required, current_user
+from compliance_app import db
+from compliance_app.auth_helpers import admin_required, current_user
 
 
 def _parse_palette_row(settings_row, key):
