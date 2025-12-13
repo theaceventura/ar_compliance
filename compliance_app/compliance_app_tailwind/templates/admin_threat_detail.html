@@ -20,7 +20,7 @@
         </div>
         <div class="flex flex-col sm:flex-row gap-2">
             {% set b = back_params or {} %}
-            <a href="{{ url_for('admin_threats', source=b.get('source',''), q=b.get('q',''), severity=b.get('severity',''), page=b.get('page','')) }}" class="inline-flex items-center px-3 py-2 text-sm font-semibold text-slate-700 bg-slate-100 border border-slate-200 rounded hover:bg-slate-200">
+            <a href="{{ url_for('threats.admin_threats', source=b.get('source',''), q=b.get('q',''), severity=b.get('severity',''), page=b.get('page','')) }}" class="inline-flex items-center px-3 py-2 text-sm font-semibold text-slate-700 bg-slate-100 border border-slate-200 rounded hover:bg-slate-200">
                 ← Back to threats
             </a>
         </div>

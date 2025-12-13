@@ -1,0 +1,29 @@
+version: "3.9"
+services:
+  app:
+    build: .
+    env_file:
+      - config/example.env
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://o365:password@db:5432/o365
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: o365
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: o365
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+volumes:
+  db_data: {}

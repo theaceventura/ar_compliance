@@ -12,7 +12,7 @@
             </div>
         </div>
         <div class="flex items-center gap-2">
-            <a href="{{ url_for('dashboard', company_id=back_company, expand_company=back_company) }}" class="inline-flex items-center px-3 py-2 text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100">
+            <a href="{{ url_for('core.dashboard', company_id=back_company, expand_company=back_company) }}" class="inline-flex items-center px-3 py-2 text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100">
                 ← Back to Dashboard
             </a>
             <a href="/admin/report/{{ user.id }}/csv" class="inline-flex items-center px-3 py-2 text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100">

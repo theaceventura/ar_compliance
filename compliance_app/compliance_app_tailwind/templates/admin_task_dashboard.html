@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
+<!-- Dashboard header: title and company filter/personal link -->
 <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-4 space-y-3 md:space-y-0">
     <div class="flex flex-col">
         <h2 class="text-xl font-semibold">
@@ -34,6 +35,7 @@
     {% endif %}
 </div>
 
+<!-- Task KPI tiles (task-based metrics) -->
 <div class="bg-white shadow rounded relative mb-4" data-widget-id="admin-dashboard-metrics">
     <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">
         <span data-label-id="heading-task-metrics">Task Metrics</span>
@@ -81,6 +83,7 @@
     </div>
 </div>
 
+<!-- User KPI tiles (user-based metrics) and unassigned alert -->
 <div class="bg-white shadow rounded relative mb-4" data-widget-id="admin-dashboard-user-metrics">
     <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700"><span data-label-id="heading-user-metrics">User Metrics</span></div>
     <div class="grid grid-cols-1 md:grid-cols-5 gap-3 p-2">
@@ -128,6 +131,7 @@
     </div>
 </div>
 
+<!-- Company summary table with drill-down tasks/users per company -->
 <div class="bg-white shadow rounded relative mb-4" data-widget-id="admin-dashboard-company-table">
     <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700">Company Task Summary</div>
     <div class="p-3 space-y-2 text-sm">
@@ -252,9 +256,9 @@
                                 </div>
                                 <div class="text-center">
                                     {% if user.role == 'company_admin' %}
-                                        <a href="{{ url_for('company_admin_report', user_id=u.id) }}" class="text-blue-600 hover:underline">View Tasks</a>
+                                        <a href="{{ url_for('admin.admin_report', user_id=u.id) }}" class="text-blue-600 hover:underline">View Tasks</a>
                                     {% else %}
-                                        <a href="{{ url_for('admin_report', user_id=u.id) }}" class="text-blue-600 hover:underline">View Tasks</a>
+                                        <a href="{{ url_for('admin.admin_report', user_id=u.id) }}" class="text-blue-600 hover:underline">View Tasks</a>
                                     {% endif %}
                                 </div>
                             </div>
@@ -295,9 +299,10 @@
 </div>
 
 {% set show_charts = (app_settings.show_task_charts if app_settings is not none else 1) %}
-{% set show_matrix = (app_settings.show_risk_matrix if app_settings is not none else 1) %}
+{% set show_matrix = (app_settings.show_risk_matrix if app_settings is not none else 1) and extensions.risk %}
 
 {% if show_charts %}
+<!-- Charts: severity/impact/completion donuts -->
 <div class="bg-white shadow rounded relative mt-4" data-widget-id="admin-dashboard-charts">
     <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700"><span data-label-id="heading-charts">Task Risk Charts</span></div>
     <div class="p-3">
@@ -338,6 +343,7 @@
 {% endif %}
 
 {% if show_matrix %}
+<!-- Optional risk matrix (severity x impact) -->
 <div class="mt-4 bg-white shadow rounded relative" data-widget-id="admin-dashboard-risk-matrix">
     <div class="bg-slate-100 px-3 py-2 rounded-t font-semibold text-slate-700 flex items-center justify-between">
         <span data-label-id="heading-risk-matrix">Task Risk Matrix (Severity × Impact)</span>
@@ -411,6 +417,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+// Simple filter helpers for tasks/users shown in the modal
 function filterUsers(list, f) {
     let title;
     let out = list || [];
@@ -505,6 +512,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // Build pies for severity/impact/completion
     function makePie(ctxId, labels, data, colors) {
         const ctx = document.getElementById(ctxId);
         if (!ctx) return;
@@ -536,8 +544,8 @@ document.addEventListener('DOMContentLoaded', () => {
     makePie('impactChart', impactLabels, impactData, impactPalette);
     makePie('completionChart', completionLabels, completionData, completionPalette);
     // filterUsers moved to outer scope — use the implementation defined above
-    
-            // Move renderUserModal to outer DOMContentLoaded scope so it is not nested inside showTasks.
+
+            // Render user drill-down list inside the modal (kept here for clarity for markers).
             function renderUserModal(list, titleText) {
                 if (!modal || !modalContent) return;
                 modalContent.innerHTML = '';

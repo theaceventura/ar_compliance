@@ -82,8 +82,12 @@
                                 <a href="/admin/companies" class="block px-3 py-2 hover:bg-slate-100"><span data-label-id="nav-company-config">Company Admin</span></a>
                                 <a href="/admin/users" class="block px-3 py-2 hover:bg-slate-100"><span data-label-id="nav-user-config">User Admin</span></a>
                                 <a href="/admin/tasks" class="block px-3 py-2 hover:bg-slate-100"><span data-label-id="nav-task-admin">Task Admin</span></a>
-                                <a href="/admin/risk-config" class="block px-3 py-2 hover:bg-slate-100"><span data-label-id="nav-risk-matrix-admin">Risk Matrix Admin</span></a>
-                                <a href="/admin/threats" class="block px-3 py-2 hover:bg-slate-100"><span data-label-id="nav-threats-admin">Threats</span></a>
+                                {% if extensions.risk %}
+                                    <a href="/admin/risk-config" class="block px-3 py-2 hover:bg-slate-100"><span data-label-id="nav-risk-matrix-admin">Risk Matrix Admin</span></a>
+                                {% endif %}
+                                {% if extensions.threats %}
+                                    <a href="/admin/threats" class="block px-3 py-2 hover:bg-slate-100"><span data-label-id="nav-threats-admin">Threats</span></a>
+                                {% endif %}
                                 <a href="/admin/app" class="block px-3 py-2 hover:bg-slate-100"><span data-label-id="nav-app-config">App Config</span></a>
                             </div>
                         </div>

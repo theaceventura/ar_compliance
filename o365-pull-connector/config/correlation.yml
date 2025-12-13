@@ -1,0 +1,6 @@
+IdentityTakeoverCandidate:
+  window_minutes: 60
+  description: "Risky sign-in followed by privilege change"
+BusinessEmailCompromiseCandidate:
+  window_minutes: 120
+  description: "Phish indicators followed by suspicious mailbox rule"

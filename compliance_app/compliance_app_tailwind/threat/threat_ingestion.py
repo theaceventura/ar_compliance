@@ -16,7 +16,7 @@ from pathlib import Path
 import feedparser
 import requests
 
-from . import db
+from compliance_app.compliance_app_tailwind import db
 
 # Simple container so callers can build threat rows consistently
 class ThreatObject:

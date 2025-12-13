@@ -93,6 +93,32 @@ function user_rollup(company_id):
 - Configurable UI controls: editable labels, color palettes, show/hide toggles for charts/risk matrix/user banners, and editable app name.
 - Drill-down dashboards: tiles → popups; company/user/task rollups; global vs company scope.
 - Admin CRUD UX: list-only by default, inline row limits, forms appear only on New/Edit, consistent controls across Users/Companies/Tasks, and per-role menu visibility.
+- Threats module (optional extension): external feeds (NVD/MSRC/CISA/Apple), ingest/enrich/rollback, overlap stats, detailed CVE view. This is outside the uni brief and can be toggled off.
+
+## 6a. What meets the uni scope (core)
+- Auth + roles, password hashing.
+- Users view/complete assigned tasks; overdue highlighting; compliance %.
+- Admin add/edit tasks with verification Q/A; view users; per-user report (completed/pending with timestamps); CSV export.
+- SQLite storage (HD external DB) with Flask GUI (HD GUI front end).
+
+## 6b. Extras beyond scope
+- Threat ingestion/admin module (feeds, enrichment, detailed CVE views).
+- Risk matrix and palette/UI customization.
+- Company-admin role and company scoping (still compatible with core).
+
+## 6c. How to run/demo
+- Core only (meets uni scope): `APP_ENABLE_THREAT_MODULE=0 APP_ENABLE_RISK_MODULE=0 flask run`
+- Core + optional risk matrix: `APP_ENABLE_RISK_MODULE=1 flask run`
+- Core + all extras (threats + risk): `APP_ENABLE_THREAT_MODULE=1 APP_ENABLE_RISK_MODULE=1 flask run`
+- Threat/risk nav links are hidden when their modules are off; routes are only registered when enabled.
+
+## Structure (blueprints/modules)
+- `core_routes.py`: login/logout, dashboard (user/company/admin delegations), task detail/answer submission.
+- `admin_routes.py`: admin/company-admin dashboards, tasks/users/companies CRUD, reports/CSV, settings.
+- `threat_routes.py`: optional threat ingestion/admin (behind `APP_ENABLE_THREAT_MODULE`).
+- `risk_routes.py`: optional risk matrix admin (behind `APP_ENABLE_RISK_MODULE`).
+- Shared helpers: `auth_helpers.py` (decorators/current_user), `core_utils.py` (formatters/tally), `risk_utils.py` (matrix build), `db.py` (data access).
+- `app.py`: app setup, extension toggles, blueprint registration, context processor.
 
 ## 7. Future improvement (if time)
 - Optional JSON/CSV import/export mode to mirror the basic storage requirement.
@@ -100,6 +126,14 @@ function user_rollup(company_id):
 - Automated tests (pytest) for rollups and assignment sync.
 - Hardened validation on setup screens (company can’t go inactive with active users, etc.) and migration to a test suite.
 
+## 8. Manual test results (core, extensions off)
+- ✅ Login success/fail: valid admin/user; invalid password rejected.
+- ✅ User dashboard: assigned tasks shown; overdue flagged; compliance % matches counts.
+- ✅ Task completion: correct answer marks completed with timestamp; incorrect stays pending.
+- ✅ Admin tasks/users: create/edit task; assign to company; create/edit user with hashed password.
+- ✅ Reports/CSV: per-user report page and CSV export render matching data.
+- ✅ App settings: toggles persist and reflect in UI (charts/banners).
+- ✅ Nav guards: admin/company-admin menus/routes block regular users; logout clears session.
 ## TODO (parked)
 - Planned task metadata expansion (question_type, response_options, impact_weight, severity_weight, risk_band, domain, alignment, acs_alignment) and Excel importer for Cyber_Readiness_Master_v2.xlsx. Deferred until design is finalized.
 

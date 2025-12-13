@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>O365 Connector UI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
+    header { padding: 16px 24px; background: linear-gradient(90deg, #0ea5e9, #6366f1); color: #0b1324; font-weight: 700; }
+    main { padding: 24px; display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+    section { background: #111827; border: 1px solid #1f2937; border-radius: 10px; padding: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.35); }
+    h2 { margin-top: 0; font-size: 18px; color: #93c5fd; }
+    label { display: block; margin-top: 8px; font-size: 12px; color: #cbd5e1; }
+    input { width: 100%; padding: 8px; margin-top: 4px; border-radius: 6px; border: 1px solid #334155; background: #0b1324; color: #e2e8f0; }
+    button { margin-top: 12px; padding: 10px 14px; border: none; border-radius: 6px; background: #22d3ee; color: #0b1324; cursor: pointer; font-weight: 700; }
+    button:hover { background: #67e8f9; }
+    pre { background: #0b1324; padding: 10px; border-radius: 8px; overflow: auto; border: 1px solid #1f2937; }
+    .pill { display: inline-block; padding: 2px 8px; background: #1e293b; border-radius: 999px; font-size: 11px; margin-right: 6px; }
+    ul { list-style: none; padding: 0; margin: 0; }
+    li { padding: 6px 0; border-bottom: 1px solid #1f2937; }
+    small { color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <header>O365 Connector</header>
+  <main>
+    <section>
+      <h2>Health</h2>
+      <button onclick="checkHealth()">Check /health</button>
+      <pre id="health"></pre>
+    </section>
+    <section>
+      <h2>Metrics</h2>
+      <button onclick="loadMetrics()">GET /metrics</button>
+      <pre id="metrics"></pre>
+    </section>
+    <section>
+      <h2>Datasets</h2>
+      <button onclick="loadDatasets()">Load /datasets</button>
+      <pre id="datasets"></pre>
+    </section>
+    <section>
+      <h2>Tenants</h2>
+      <button onclick="loadTenants()">Refresh Tenants</button>
+      <ul id="tenant-list"></ul>
+      <h3>Add Tenant</h3>
+      <label>Tenant ID <input id="tenant_id"></label>
+      <label>Name <input id="tenant_name"></label>
+      <label>Client ID <input id="client_id"></label>
+      <label>Client Secret Ref <input id="client_secret_ref"></label>
+      <button onclick="addTenant()">Create</button>
+      <pre id="tenant-result"></pre>
+    </section>
+    <section>
+      <h2>Run Now</h2>
+      <label>Tenant (pick) <select id="run_tenant_select"></select></label>
+      <label>Tenant (custom) <input id="run_tenant"></label>
+      <label>Dataset (pick) <select id="run_dataset_select"></select></label>
+      <label>Dataset (custom) <input id="run_dataset"></label>
+      <button onclick="runNow()">POST /run/&lt;tenant&gt;/</button>
+      <pre id="run-output"></pre>
+    </section>
+    <section>
+      <h2>Normalized Events</h2>
+      <label>Tenant (pick) <select id="events_tenant_select"></select></label>
+      <label>Tenant (custom) <input id="events_tenant"></label>
+      <label>Type (pick) <select id="events_type_select"></select></label>
+      <label>Type (custom) <input id="events_type"></label>
+      <label>Since (ISO optional) <input id="events_since" placeholder="2025-12-12T00:00:00Z"></label>
+      <label>Severity filter (client-side) <select id="events_severity">
+        <option value="">-- any --</option>
+        <option value="high">high</option>
+        <option value="medium">medium</option>
+        <option value="low">low</option>
+      </select></label>
+      <label>Limit <input id="events_limit" value="20" type="number" min="1" max="200"></label>
+      <button onclick="loadEvents()">Load</button>
+      <button onclick="downloadEvents()">Download JSON</button>
+      <pre id="events-output"></pre>
+    </section>
+    <section>
+      <h2>Actors</h2>
+      <label>Tenant (pick) <select id="actors_tenant_select"></select></label>
+      <label>Tenant (custom) <input id="actors_tenant"></label>
+      <label>Type (pick) <select id="actors_type_select"></select></label>
+      <label>Type (custom) <input id="actors_type"></label>
+      <button onclick="loadActors()">GET /actors</button>
+      <pre id="actors-output"></pre>
+    </section>
+    <section>
+      <h2>Readiness</h2>
+      <label>Tenant (pick) <select id="ready_tenant_select"></select></label>
+      <label>Tenant (custom) <input id="ready_tenant"></label>
+      <button onclick="checkReadiness()">GET /tenants/&lt;id&gt;/readiness</button>
+      <pre id="ready-output"></pre>
+    </section>
+    <section>
+      <h2>Export Summary</h2>
+      <label>Tenant (pick) <select id="export_tenant_select"></select></label>
+      <label>Tenant (custom) <input id="export_tenant"></label>
+      <label>Since (ISO optional) <input id="export_since" placeholder="2025-12-12T00:00:00Z"></label>
+      <button onclick="loadExport()">GET /export/summary</button>
+      <button onclick="downloadExport()">Download JSON</button>
+      <pre id="export-output"></pre>
+    </section>
+  </main>
+  <script>
+    let datasetsList = [];
+    const eventTypes = ["SignInEvent", "PrivilegeAssignment", "ConditionalAccessPolicy", "MFARegistrationStatus", "IncidentCandidate"];
+    async function checkHealth() {
+      const res = await fetch('/health');
+      document.getElementById('health').textContent = JSON.stringify(await res.json(), null, 2);
+    }
+    async function loadMetrics() {
+      const res = await fetch('/metrics');
+      document.getElementById('metrics').textContent = JSON.stringify(await res.json(), null, 2);
+    }
+    async function loadDatasets() {
+      const res = await fetch('/datasets');
+      const data = await res.json();
+      document.getElementById('datasets').textContent = JSON.stringify(data, null, 2);
+      datasetsList = data.datasets || [];
+      const dsSelect = document.getElementById('run_dataset_select');
+      const typeSelect = document.getElementById('events_type_select');
+      const actorsType = document.getElementById('actors_type_select');
+      dsSelect.innerHTML = '<option value="">-- any --</option>';
+      datasetsList.forEach(d => {
+        const opt = document.createElement('option');
+        opt.value = d;
+        opt.textContent = d;
+        dsSelect.appendChild(opt);
+      });
+      typeSelect.innerHTML = '<option value="">-- any --</option>';
+      eventTypes.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t;
+        opt.textContent = t;
+        typeSelect.appendChild(opt);
+      });
+      actorsType.innerHTML = '<option value="">-- any --</option>';
+      eventTypes.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t;
+        opt.textContent = t;
+        actorsType.appendChild(opt);
+      });
+    }
+    async function loadTenants() {
+      const res = await fetch('/tenants');
+      const data = await res.json();
+      const ul = document.getElementById('tenant-list');
+      ul.innerHTML = '';
+      const runSelect = document.getElementById('run_tenant_select');
+      const eventsSelect = document.getElementById('events_tenant_select');
+      const readySelect = document.getElementById('ready_tenant_select');
+      const exportSelect = document.getElementById('export_tenant_select');
+      const actorsSelect = document.getElementById('actors_tenant_select');
+      runSelect.innerHTML = '<option value="">-- choose --</option>';
+      eventsSelect.innerHTML = '<option value="">-- choose --</option>';
+      readySelect.innerHTML = '<option value="">-- choose --</option>';
+      exportSelect.innerHTML = '<option value="">-- choose --</option>';
+      actorsSelect.innerHTML = '<option value="">-- choose --</option>';
+      data.forEach(t => {
+        const li = document.createElement('li');
+        li.innerHTML = '<span class="pill">' + (t.is_enabled ? 'enabled' : 'disabled') + '</span> ' + t.tenant_id + ' <small>' + t.tenant_name + '</small> ' +
+          '<button style="margin-left:8px;padding:4px 8px;font-size:11px;background:#ef4444;color:#0b1324;border:none;border-radius:6px;cursor:pointer;" onclick="deleteTenant(\'' + t.tenant_id + '\')">Delete</button>';
+        ul.appendChild(li);
+        [runSelect, eventsSelect, readySelect, exportSelect, actorsSelect].forEach(sel => {
+          const opt = document.createElement('option');
+          opt.value = t.tenant_id;
+          opt.textContent = `${t.tenant_name} (${t.tenant_id})`;
+          sel.appendChild(opt);
+        });
+      });
+    }
+    async function deleteTenant(tenantId) {
+      if (!confirm('Delete tenant ' + tenantId + '?')) return;
+      const res = await fetch('/tenants/' + encodeURIComponent(tenantId), {method: 'DELETE'});
+      const body = await res.json();
+      alert(body.status || JSON.stringify(body));
+      loadTenants();
+    }
+    async function addTenant() {
+      const payload = {
+        tenant_id: document.getElementById('tenant_id').value,
+        tenant_name: document.getElementById('tenant_name').value,
+        client_id: document.getElementById('client_id').value,
+        client_secret_ref: document.getElementById('client_secret_ref').value,
+      };
+      const res = await fetch('/tenants', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
+      document.getElementById('tenant-result').textContent = JSON.stringify(await res.json(), null, 2);
+      loadTenants();
+    }
+    async function runNow() {
+      const tenant = document.getElementById('run_tenant').value || document.getElementById('run_tenant_select').value;
+      const dataset = document.getElementById('run_dataset').value || document.getElementById('run_dataset_select').value;
+      if (!tenant) {
+        alert('Pick or enter a tenant id');
+        return;
+      }
+      if (dataset && !datasetsList.includes(dataset)) {
+        alert(`Unsupported dataset "${dataset}". Pick from dropdown.`);
+        return;
+      }
+      const url = dataset ? `/run/${tenant}/?dataset=${encodeURIComponent(dataset)}` : `/run/${tenant}/`;
+      const res = await fetch(url, {method: 'POST'});
+      document.getElementById('run-output').textContent = JSON.stringify(await res.json(), null, 2);
+    }
+    async function loadEvents() {
+      const tenant = document.getElementById('events_tenant').value || document.getElementById('events_tenant_select').value;
+      const type = document.getElementById('events_type').value || document.getElementById('events_type_select').value;
+      const since = document.getElementById('events_since').value;
+      const limit = document.getElementById('events_limit').value || '20';
+      const params = new URLSearchParams();
+      if (tenant) params.append('tenant_id', tenant);
+      if (type) params.append('type', type);
+      if (since) params.append('since', since);
+      params.append('limit', limit);
+      const res = await fetch('/events/normalized?' + params.toString());
+      const data = await res.json();
+      const severityFilter = document.getElementById('events_severity').value;
+      const filtered = severityFilter ? data.filter(e => (e.severity || '').toLowerCase() === severityFilter) : data;
+      window.__lastEvents = filtered;
+      document.getElementById('events-output').textContent = JSON.stringify(filtered, null, 2);
+    }
+    function downloadEvents() {
+      if (!window.__lastEvents) { alert('Load events first'); return; }
+      const blob = new Blob([JSON.stringify(window.__lastEvents, null, 2)], {type: 'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'events.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+    async function checkReadiness() {
+      const tenant = document.getElementById('ready_tenant').value || document.getElementById('ready_tenant_select').value;
+      if (!tenant) { alert('Pick or enter a tenant id'); return; }
+      const res = await fetch(`/tenants/${encodeURIComponent(tenant)}/readiness`);
+      document.getElementById('ready-output').textContent = JSON.stringify(await res.json(), null, 2);
+    }
+    async function loadExport() {
+      const tenant = document.getElementById('export_tenant').value || document.getElementById('export_tenant_select').value;
+      if (!tenant) { alert('Pick or enter a tenant id'); return; }
+      const since = document.getElementById('export_since').value;
+      const params = new URLSearchParams();
+      params.append('tenant_id', tenant);
+      if (since) params.append('since', since);
+      const res = await fetch('/export/summary?' + params.toString());
+      const data = await res.json();
+      window.__lastExport = data;
+      document.getElementById('export-output').textContent = JSON.stringify(data, null, 2);
+    }
+    function downloadExport() {
+      if (!window.__lastExport) { alert('Load export first'); return; }
+      const blob = new Blob([JSON.stringify(window.__lastExport, null, 2)], {type: 'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'export_summary.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+    async function loadActors() {
+      const tenant = document.getElementById('actors_tenant').value || document.getElementById('actors_tenant_select').value;
+      const type = document.getElementById('actors_type').value || document.getElementById('actors_type_select').value;
+      if (!tenant) { alert('Pick or enter a tenant id'); return; }
+      const params = new URLSearchParams();
+      params.append('tenant_id', tenant);
+      if (type) params.append('type', type);
+      const res = await fetch('/actors?' + params.toString());
+      document.getElementById('actors-output').textContent = JSON.stringify(await res.json(), null, 2);
+    }
+    // auto-load basics
+    checkHealth();
+    loadDatasets();
+    loadTenants();
+  </script>
+</body>
+</html>

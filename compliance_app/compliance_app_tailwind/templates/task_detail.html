@@ -1,8 +1,11 @@
 {% extends "base.html" %}
 
+<!-- Single task detail page: shows question, due date, and answer form -->
+
 {% block content %}
 <div class="max-w-4xl mx-auto bg-white shadow p-6 rounded relative space-y-5" data-widget-id="user-task-detail">
 
+    <!-- Header: who the task is for and navigation back -->
     <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
             {% set assigned_name = ((acting_user.first_name or '') ~ ' ' ~ (acting_user.last_name or '')) if acting_user else '' %}
@@ -17,21 +20,22 @@
         </div>
         <div class="flex items-center gap-2">
             {% if request.args.get("return") == "dashboard" %}
-                <a href="{{ url_for('dashboard') }}" class="inline-flex items-center px-3 py-2 text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100">
+                <a href="{{ url_for('core.dashboard') }}" class="inline-flex items-center px-3 py-2 text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100">
                     ← Back to Tasks
                 </a>
             {% elif request.args.get("user_id") %}
-                <a href="{{ url_for('admin_report', user_id=request.args.get('user_id')) }}" class="inline-flex items-center px-3 py-2 text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100">
+                <a href="{{ url_for('admin.admin_report', user_id=request.args.get('user_id')) }}" class="inline-flex items-center px-3 py-2 text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100">
                     ← Back to Tasks
                 </a>
             {% else %}
-                <a href="{{ url_for('dashboard') }}" class="inline-flex items-center px-3 py-2 text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100">
+                <a href="{{ url_for('core.dashboard') }}" class="inline-flex items-center px-3 py-2 text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100">
                     ← Back to Tasks
                 </a>
             {% endif %}
         </div>
     </div>
 
+    <!-- Status tiles: due, completion, severity, impact -->
     <div class="grid grid-cols-1 md:grid-cols-5 gap-3 text-sm text-slate-700">
         {% set status_bg = 'bg-green-50 border-green-200 text-green-800' if is_completed else ('bg-amber-50 border-amber-200 text-amber-800') %}
         <div class="border rounded p-3 shadow-sm text-center min-h-[80px] flex flex-col justify-center {{ status_bg }}">
@@ -58,6 +62,7 @@
         </div>
     </div>
 
+    <!-- Core task metadata -->
     <div class="bg-slate-50 border border-slate-100 rounded p-4 space-y-3">
         <div class="flex items-center gap-3 text-sm text-slate-700">
             <div class="font-semibold text-slate-800 w-40 shrink-0 text-left">Task No</div>
@@ -75,6 +80,7 @@
         </div>
     </div>
 
+    <!-- Verification question and answer input -->
     <div class="bg-amber-50 border border-amber-200 rounded p-4 space-y-3 shadow-sm">
         <div class="flex items-start gap-3 text-sm text-amber-900">
             <div class="font-semibold w-40 shrink-0 text-left">Task Verification Text</div>

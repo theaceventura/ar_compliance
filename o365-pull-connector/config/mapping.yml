@@ -1,0 +1,31 @@
+type_map:
+  SignInEvent:
+    domain: identity
+    control_key: signin_monitoring
+    board_metric: risky_signins
+    default_severity: medium
+    default_confidence: medium
+  PrivilegeAssignment:
+    domain: identity
+    control_key: privileged_access
+    board_metric: privilege_changes
+    default_severity: high
+    default_confidence: high
+  ConditionalAccessPolicy:
+    domain: access
+    control_key: conditional_access
+    board_metric: ca_policy_health
+    default_severity: medium
+    default_confidence: high
+  MFARegistrationStatus:
+    domain: identity
+    control_key: mfa_enrollment
+    board_metric: mfa_coverage
+    default_severity: medium
+    default_confidence: high
+  IncidentCandidate:
+    domain: identity
+    control_key: incident_detection
+    board_metric: incidents
+    default_severity: high
+    default_confidence: medium
